@@ -1283,7 +1283,11 @@ def apply_cost_sign(value, matched_label, is_cost):
 # literal code happens to hold it in a given filing.
 SUMMARY_LABEL_FALLBACKS = {
     "10000": ["資產總計", "資產合計"],
-    "4xxxx": ["淨收益"],
+    # 淨收益合計 confirmed in a real 第一銀行 114Q4 individual filing - same
+    # line, same position in the net-income walk, just worded with the
+    # 合計 suffix. Exact whole-cell matching (see find_value_by_label) keeps
+    # this from colliding with anything.
+    "4xxxx": ["淨收益", "淨收益合計"],
     "49010": ["利息淨收益合計", "利息淨收益"],
     "58400": ["營業費用合計"],
     "61001": ["稅前淨利", "繼續營業單位稅前淨利"],
@@ -1295,6 +1299,27 @@ SUMMARY_LABEL_FALLBACKS = {
     # removed from the summary output); kept here, unused, in case that
     # check is wanted again later.
     "20000": ["負債合計", "負債總計"],
+}
+
+# Last resort after both the code match and the label fallback fail: rebuild
+# the line from its own components. Only for lines a filing can legitimately
+# omit entirely - 兆豐 and 第一's real 114Q4 individual filings print 營業費用
+# as a section HEADER with no amounts at all, then the three component rows,
+# then go straight to 稅前淨利. There is no row to match, by code or by label.
+#
+# This is arithmetic, not a guess, and it was checked both ways before being
+# added: on the four 114Q4 filings that DO print 58400 (台新/新光/永豐/華南)
+# the sum of these three reproduces the printed total to the exact dollar,
+# and on the two that don't it closes the filing's own
+# 淨收益 - 呆帳 - 營業費用 = 稅前淨利 walk exactly. The derived row still says
+# so in its note - a figure the filing itself never states must not be
+# indistinguishable from one it does.
+#
+# ponytail: one entry, consulted only on a miss. If a filing ever turns up
+# with a FOURTH opex component, this silently understates - which is why the
+# note names the components it actually summed.
+SUMMARY_CODE_DERIVATIONS = {
+    "58400": ["58500", "59000", "59500"],
 }
 
 # ---------------------------------------------------------------------------
@@ -1409,6 +1434,87 @@ BANK_PROFILES = {
         "composites": {
             "評價及已實現": ["49200", "49310", "49600"],
             "其他非利息收益": ["49700", "49750", "49899"],
+        },
+    },
+    # The six below were added from real 114Q4 individual filings. Their
+    # composites are read off each filing's own 個體綜合損益表 rather than
+    # copied from a sibling - the component codes genuinely differ (兆豐 and
+    # 第一 print 43100 where everyone else prints 49310; 第一 alone uses 43600
+    # and 45000; 華南 uses 47003 for the equity-method line; 新光 has no
+    # 除列按攤銷後成本 line at all).
+    # primary_entities here are NOT verified against a real earnings-call
+    # deck - no deck for these six has been through this tool yet. They only
+    # affect con-call extraction; check them against a real deck before
+    # trusting con-call output for these entities.
+    "兆豐": {
+        "industries": ["金融業", "金控業"],
+        "aliases": ["兆豐"],
+        "primary_entities": ["兆豐銀", "Mega International", "Mega Bank"],
+        "code_overrides": {},
+        "code_overrides_finsum": {},
+        "composites": {
+            "評價及已實現": ["49200", "43100", "49450", "49600"],
+            "其他非利息收益": ["49700", "49750", "49800"],
+        },
+    },
+    "台新": {
+        "industries": ["金融業", "金控業"],
+        "aliases": ["台新", "臺新"],
+        "primary_entities": ["台新銀", "臺新銀", "Taishin"],
+        "code_overrides": {},
+        "code_overrides_finsum": {},
+        "composites": {
+            "評價及已實現": ["49200", "49310", "49450", "49600"],
+            "其他非利息收益": ["49700", "49750", "49800"],
+        },
+    },
+    "新光": {
+        "industries": ["金融業", "金控業"],
+        "aliases": ["新光"],
+        "primary_entities": ["新光銀", "Shin Kong Bank"],
+        "code_overrides": {},
+        "code_overrides_finsum": {},
+        "composites": {
+            # No 除列按攤銷後成本衡量之金融資產損益 line in this filing at all.
+            "評價及已實現": ["49200", "49310", "49600"],
+            "其他非利息收益": ["49700", "49815", "49899"],
+        },
+    },
+    "永豐": {
+        "industries": ["金融業", "金控業"],
+        "aliases": ["永豐"],
+        "primary_entities": ["永豐銀", "Bank SinoPac"],
+        "code_overrides": {},
+        "code_overrides_finsum": {},
+        "composites": {
+            "評價及已實現": ["49200", "49310", "49450", "49600"],
+            "其他非利息收益": ["49700", "49750", "49800"],
+        },
+    },
+    # "第一" alone would be a substring of ordinary text (第一階段, 第一季) in
+    # every other bank's filing, making this entity a candidate everywhere and
+    # turning detect_bank ambiguous for all of them - hence only the longer
+    # forms.
+    "第一": {
+        "industries": ["金融業", "金控業"],
+        "aliases": ["第一商業銀行", "第一銀行", "第一金"],
+        "primary_entities": ["第一銀", "First Commercial Bank"],
+        "code_overrides": {},
+        "code_overrides_finsum": {},
+        "composites": {
+            "評價及已實現": ["49200", "43100", "43600", "49600"],
+            "其他非利息收益": ["45000", "49750", "49800"],
+        },
+    },
+    "華南": {
+        "industries": ["金融業", "金控業"],
+        "aliases": ["華南"],
+        "primary_entities": ["華南銀", "Hua Nan"],
+        "code_overrides": {},
+        "code_overrides_finsum": {},
+        "composites": {
+            "評價及已實現": ["49200", "49310", "49450", "49600"],
+            "其他非利息收益": ["49700", "47003", "49899"],
         },
     },
 }
@@ -1741,9 +1847,15 @@ def collect_summary_rows(folder, bank, period=1, verbose=False, coding=None,
       - is_percent: True only for ROA/ROE (already a % rate, not a NT$
         amount) - display code uses this to choose format_pct vs
         format_value rather than assuming based on term name.
-      - crosscheck_value / note: ROA/ROE only, None/"" for every other row
-        (see collect_roa_roe - the manual-formula cross-check, and a note
-        when it diverges sharply from the primary value).
+      - crosscheck_value: ROA/ROE only, None for every other row (see
+        collect_roa_roe - the manual-formula cross-check).
+      - note: "" for a row that resolved cleanly. Set on ROA/ROE when the
+        cross-check diverges or the value is implausible (collect_roa_roe),
+        AND on every N/A row, saying WHY it's N/A - missing code, no
+        matching label, no composite formula for this bank. That reason is
+        also printed under -v, but the note is the only copy that reaches
+        the csv/excel exports, which is where the distinction between "not
+        disclosed" and "we failed to read this filing" actually matters.
     concall_roa/concall_roe: an earnings-call deck's own reported ROA/ROE
     (looked up by the caller via callfinder.py, since this module can't
     import it - see collect_roa_roe), used as a fallback when this fin
@@ -1781,6 +1893,9 @@ def collect_summary_rows(folder, bank, period=1, verbose=False, coding=None,
         if item["kind"] == "code":
             code = overrides.get(item["code"], item["code"])
             needed_codes.add(code)
+            # Fetched whether or not they're needed - they're layout items in
+            # their own right today, but this must not depend on that.
+            needed_codes.update(SUMMARY_CODE_DERIVATIONS.get(code, []))
             fallback = SUMMARY_LABEL_FALLBACKS.get(item["code"])
             if fallback:
                 label_fallbacks[code] = fallback
@@ -1798,27 +1913,44 @@ def collect_summary_rows(folder, bank, period=1, verbose=False, coding=None,
         if item["kind"] == "code":
             code = overrides.get(item["code"], item["code"])
             found = index.get(code)
+            note = ""
+            if found is None and code in SUMMARY_CODE_DERIVATIONS:
+                parts = [index.get(c) for c in SUMMARY_CODE_DERIVATIONS[code]]
+                if all(p is not None for p in parts):
+                    labels = [p[0] for p in parts]
+                    found = ("+".join(labels), sum(p[1] for p in parts), parts[0][2])
+                    note = (f"derived: this filing states no {item['term']} total, "
+                            f"so this is {' + '.join(labels)}")
+                    if verbose:
+                        print(f"[derived] code {code} ({item['term']}) = {' + '.join(labels)}")
             if found is None:
+                # Same string to the console and to the row's note: the note is
+                # the only place this reason survives into the exported csv/
+                # excel, where an unreadable filing and an undisclosed line
+                # otherwise look identical (see summary_coverage_warning).
+                reason = f"code {code} ({item['term']}) not found in any file"
                 if verbose:
-                    print(f"[N/A] code {code} ({item['term']}) not found in any file")
+                    print(f"[N/A] {reason}")
                 rows.append({"term": item["term"], "value": None, "matched_label": None, "source_file": None,
-                             "is_percent": False, "crosscheck_value": None, "note": ""})
+                             "is_percent": False, "crosscheck_value": None, "note": reason})
                 continue
             matched_label, value, source_file = found
             value = apply_cost_sign(value, matched_label, item["is_cost"])
             rows.append({"term": item["term"], "value": value,
                          "matched_label": matched_label, "source_file": source_file,
-                         "is_percent": False, "crosscheck_value": None, "note": ""})
+                         "is_percent": False, "crosscheck_value": None, "note": note})
             continue
 
         if item["kind"] == "label":
             term_name = item["term"]
             found = find_value_by_label(folder, item["label_aliases"], period=period, verbose=verbose)
             if found is None:
+                reason = f"'{term_name}' - none of {item['label_aliases']} found in any file"
                 if verbose:
-                    print(f"[N/A] '{term_name}' - none of {item['label_aliases']} found in any file")
+                    print(f"[N/A] {reason}")
                 rows.append({"term": term_name, "value": None, "matched_label": None, "source_file": None,
-                             "is_percent": item.get("is_percent", False), "crosscheck_value": None, "note": ""})
+                             "is_percent": item.get("is_percent", False), "crosscheck_value": None,
+                             "note": reason})
                 continue
             matched_label, value, source_file = found
             rows.append({"term": term_name, "value": value,
@@ -1830,25 +1962,26 @@ def collect_summary_rows(folder, bank, period=1, verbose=False, coding=None,
         term_name = item["term"]
         codes = COMPOSITE_TERMS[item["name"]].get(bank)
         if codes is None:
+            reason = f"'{term_name}' has no formula defined for bank '{bank}'"
             if verbose:
-                print(f"[N/A] '{term_name}' has no formula defined for bank '{bank}'")
+                print(f"[N/A] {reason}")
             rows.append({"term": term_name, "value": None, "matched_label": None, "source_file": None,
-                         "is_percent": False, "crosscheck_value": None, "note": ""})
+                         "is_percent": False, "crosscheck_value": None, "note": reason})
             continue
-        component_values, component_files, missing = [], [], False
+        component_values, component_files, missing = [], [], None
         for code in codes:
             found = index.get(code)
             if found is None:
-                missing = True
+                missing = f"'{term_name}': component code {code} not found"
                 if verbose:
-                    print(f"[N/A] '{term_name}': component code {code} not found")
+                    print(f"[N/A] {missing}")
                 break
             _label, value, source_file = found
             component_values.append(value)
             component_files.append(source_file)
         if missing:
             rows.append({"term": term_name, "value": None, "matched_label": None, "source_file": None,
-                         "is_percent": False, "crosscheck_value": None, "note": ""})
+                         "is_percent": False, "crosscheck_value": None, "note": missing})
             continue
         total = sum(component_values)
         total = apply_cost_sign(total, None, item["is_cost"])
@@ -1862,26 +1995,40 @@ def collect_summary_rows(folder, bank, period=1, verbose=False, coding=None,
     # scope from this fin_report's individual-entity 58400/4xxxx codes (e.g.
     # a real 中信 4Q25 con-call page's revenue/opex were roughly an order of
     # magnitude off fin_report's, not a rounding-level gap) - moved here per
-    # explicit instruction, reusing the same 4xxxx/58400 lookups already
-    # fetched above for 淨收益/營業費用, so no extra folder scan needed.
-    netrev_found = index.get("4xxxx")
-    opex_found = index.get("58400")
-    cir_value = None
-    if netrev_found is not None and opex_found is not None:
-        _, netrev_value, _ = netrev_found
-        _, opex_value, _ = opex_found
+    # explicit instruction, no extra folder scan needed.
+    #
+    # Read off the ROWS just built, not the raw code index: those two rows
+    # have already been through the label fallback and SUMMARY_CODE_DERIVATIONS,
+    # so a filing that states no 營業費用 total still gets a CIR instead of
+    # this silently disagreeing with the 營業費用 line printed right above it.
+    # abs() makes the is_cost sign flip on the 營業費用 row irrelevant here.
+    by_term = {r["term"]: r["value"] for r in rows}
+    netrev_value, opex_value = by_term.get("淨收益"), by_term.get("營業費用")
+    cir_value, cir_note = None, ""
+    if netrev_value is not None and opex_value is not None:
         if netrev_value:
             cir_value = abs(opex_value) / netrev_value * 100
+        else:
+            cir_note = "CIR undefined: 淨收益 is zero"
+    else:
+        absent = [t for t, v in (("淨收益", netrev_value), ("營業費用", opex_value)) if v is None]
+        cir_note = f"CIR needs {' and '.join(absent)}, which came back N/A above"
     rows.append({"term": "CIR", "value": cir_value, "matched_label": "abs(營業費用) / 淨收益",
-                 "source_file": None, "is_percent": True, "crosscheck_value": None, "note": ""})
+                 "source_file": None, "is_percent": True, "crosscheck_value": None, "note": cir_note})
 
     roa_roe = collect_roa_roe(folder, bank, coding=coding, concall_roa=concall_roa,
                                concall_roe=concall_roe, verbose=verbose)
     for key, term in (("roa", "ROA"), ("roe", "ROE")):
         r = roa_roe[key]
         if r is None:
+            # None means all three sources in collect_roa_roe's priority order
+            # came up empty - naming them is what tells a reader whether to go
+            # looking for a 獲利能力 table or for the missing balance-sheet
+            # codes the manual formula needs.
             rows.append({"term": term, "value": None, "matched_label": None, "source_file": None,
-                         "is_percent": True, "crosscheck_value": None, "note": ""})
+                         "is_percent": True, "crosscheck_value": None,
+                         "note": f"no {term}: filing discloses no 獲利能力 table, no con-call figure "
+                                 f"was supplied, and the manual formula wasn't derivable"})
         else:
             rows.append({"term": r["term"], "value": r["value"], "matched_label": r["matched_label"],
                          "source_file": r["source_file"], "is_percent": True,
@@ -1926,13 +2073,14 @@ _SUMMARY_NA_WARN_RATIO = 0.5
 def summary_coverage_warning(rows, folder=None):
     """A one-line warning when most of a summary came back N/A, else None.
 
-    An N/A row and a correctly-extracted row are indistinguishable in the
-    output - that is deliberate (every SUMMARY_LAYOUT line always appears,
-    see collect_summary_rows), but it means a filing whose layout this
-    extractor simply failed to read produces output that looks exactly like
-    a successful run. At four banks that was catchable by eye; across the
-    whole sector it is not, and the csv/excel export paths don't even print
-    the rows for anyone to look at.
+    An N/A row still occupies a line like any other (every SUMMARY_LAYOUT
+    line always appears, see collect_summary_rows), so a filing whose layout
+    this extractor simply failed to read produces output shaped exactly like
+    a successful run. Each N/A row now carries its own reason in `note`, but
+    that is per-row: it says why THIS line is missing, not that the run as a
+    whole went wrong. At four banks the wholesale case was catchable by eye;
+    across the whole sector it is not, and the csv/excel export paths don't
+    even print the rows for anyone to look at.
 
     ponytail: one flat ratio over all rows. If it turns out to be noisy, the
     fix is a per-row 'expected N/A' flag in SUMMARY_LAYOUT (活存比 is the

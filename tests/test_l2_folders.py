@@ -365,6 +365,27 @@ def test_P6_an_earnings_call_deck_still_resolves_with_no_industry(tmp_path):
     assert af.detect_industry_category(deck) is None
     assert af.detect_bank(deck) == "玉山"
 
+def test_P6b_no_alias_is_an_ordinary_word_that_appears_in_every_filing():
+    """The reason 第一銀行's aliases are the long forms. '第一' on its own is a
+    substring of ordinary prose (第一階段, 第一季) in every other bank's
+    filing, which would make that entity a candidate everywhere and turn
+    detect_bank ambiguous - i.e. every folder skipped - for all of them."""
+    prose = "民國114年度第一季，本行於第一階段採用預期信用損失模式。"
+    for name, profile in af.BANK_PROFILES.items():
+        for alias in profile["aliases"]:
+            assert alias not in prose, f"{name}'s alias {alias!r} matches ordinary prose"
+
+
+def test_P6c_no_alias_makes_another_entity_a_candidate(tmp_path):
+    """Aliases are matched as substrings, so one being contained in another
+    resolves both and detect_bank refuses. Cheap to pin, expensive to notice:
+    the symptom is a folder silently skipped, not an error."""
+    for name, profile in af.BANK_PROFILES.items():
+        folder = make_folder(tmp_path, f"alias_{name}",
+                             {"001.md": f"{profile['aliases'][0]}商業銀行股份有限公司\n"})
+        assert af.bank_candidates(folder) == [name]
+
+
 def test_P7_stating_an_empty_override_is_the_same_as_omitting_the_entity():
     """The two override tables used to omit entities with no overrides
     entirely; the profiles state them as empty instead. Both consumers read
