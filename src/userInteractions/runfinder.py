@@ -26,18 +26,30 @@ dialog if you only have one folder to classify).
 """
 
 import argparse
+import importlib
 import re
 import sys
 from pathlib import Path
 
-import acctfinder as af
-import callfinder as cf
+# `python src/userInteractions/runfinder.py` puts THIS directory on sys.path,
+# not src/, so the sibling packages would not resolve. This is the one file
+# users are told to run by path (it is the single CLI - see _SUBCOMMANDS), so
+# it bootstraps src/ itself rather than making everyone set PYTHONPATH.
+_SRC = Path(__file__).resolve().parent.parent
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
+
+from financialReports import acctfinder as af
+from earningsCalls import callfinder as cf
 
 # Windows consoles often default to cp1252, which can't print CJK output.
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
 
-_DEFAULT_CONFIG = str(Path(__file__).parent.parent / "data" / "con_call_terms.json")
+# Repo root is THREE levels up from src/<package>/, not two. This module
+# moved down a directory; the same expression silently pointed at src/
+# instead. See core/industry.py, where exactly this bit once.
+_DEFAULT_CONFIG = str(Path(__file__).resolve().parent.parent.parent / "data" / "con_call_terms.json")
 _EXCEL_EXPORT_DIR = Path.home() / "Downloads"
 
 _CON_CALL_MARKERS = ["法說會", "法人說明會", "說明會", "說明簡報", "投資人簡報",
@@ -504,5 +516,33 @@ def main():
         open_file(out_path)
 
 
+# The single user-facing entry point. The other three packages keep their own
+# argparse main() exactly as it was - this only routes to them, so every flag
+# they already document keeps working and none of them needed touching.
+#
+# Dispatched by peeking at argv rather than with argparse subparsers, because
+# runfinder's own CLI takes a bare positional (`runfinder <folder> <folder>`)
+# and adding subparsers around that would have changed the interface people
+# already use. A subcommand name is never a folder name, so the peek is
+# unambiguous; anything else falls through to the parser below untouched.
+_SUBCOMMANDS = {
+    "acct": ("financialReports.acctfinder", "per-statement / summary extraction from a filing"),
+    "call": ("earningsCalls.callfinder", "term extraction from an earnings-call deck"),
+    "npl": ("regulatorDatasets.npl_finder", "fetch the FSC 銀行局 monthly datasets"),
+}
+
+
+def _dispatch(argv):
+    """Hand off to a package's own CLI, or return False to run runfinder's."""
+    if len(argv) < 2 or argv[1] not in _SUBCOMMANDS:
+        return False
+    module_name, _help = _SUBCOMMANDS[argv.pop(1)]
+    # argv is sys.argv - the subcommand is removed above so the target's own
+    # argparse sees exactly the arguments it always did.
+    importlib.import_module(module_name).main()
+    return True
+
+
 if __name__ == "__main__":
-    main()
+    if not _dispatch(sys.argv):
+        main()

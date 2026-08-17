@@ -60,9 +60,9 @@ from core.tables import build_raw_lines, restrict_section, parse_pipe_tables
 # acctfinder facade. Reaching through acctfinder pulled the whole fin_report
 # stack (summary -> ratios -> entities) in to get four names, and made this
 # module look like it depended on summary extraction, which it does not.
-from entities import BANK_PROFILES, detect_bank
-from ratios import derive_quarter_num
-from acctfinder import pick_folder
+from financialReports.entities import BANK_PROFILES, detect_bank
+from financialReports.ratios import derive_quarter_num
+from financialReports.acctfinder import pick_folder
 
 # Windows consoles often default to cp1252, which can't print CJK output.
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
@@ -378,6 +378,11 @@ _ENTITY_NAME_RE = re.compile(
 # concepts throughout (存放比, 放款結構, NIM, ...), so the bank-named table
 # is preferred over one merely containing "金控"/holding-company language.
 _BANK_LABEL_HINT = "銀行"
+
+# Repo root is THREE levels up from src/<package>/, not two. This module
+# moved down a directory; the same expression silently pointed at src/
+# instead. See core/industry.py, where exactly this bit once.
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # The PRIMARY bank subsidiary each deck is about - see BANK_PROFILES'
 # primary_entities field for why picking the wrong subsidiary is worse than
@@ -1228,7 +1233,7 @@ def collect_con_call_summary(folder, terms, verbose=False, bank=None):
     need_gov = raw["信用卡循環"]["value"] is None
     if bank:
         try:
-            import npl_finder
+            from regulatorDatasets import npl_finder
             legal = _GOV_BANK_NAMES.get(bank)
             if legal:
                 if western_year and quarter_num:
@@ -1360,7 +1365,7 @@ def main():
         help="Term name(s) from the config, comma/space separated. 'summary' (or omitting this "
              "argument) runs the curated business-relevant subset instead of every dictionary term.",
     )
-    ap.add_argument("--config", default=str(Path(__file__).parent.parent / "data" / "con_call_terms.json"),
+    ap.add_argument("--config", default=str(_REPO_ROOT / "data" / "con_call_terms.json"),
                      help="Path to the term config JSON (default: the bundled data/con_call_terms.json)")
     ap.add_argument("--export", choices=["csv"], help="Write results to a CSV file instead of stdout")
     ap.add_argument("-v", "--verbose", action="store_true", help="Print per-file/per-term detail")

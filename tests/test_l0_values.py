@@ -7,7 +7,7 @@ same commit as the code change.
 """
 import pytest
 
-from acctfinder import _looks_like_code, nth_value, parse_numeric
+from financialReports.acctfinder import _looks_like_code, nth_value, parse_numeric
 
 # --------------------------------------------------------------------------
 # §3.1 parse_numeric - ECT + BVT (16)

@@ -5,7 +5,7 @@ downstream depends on. They take and return plain lists, so no fixture files
 are needed: build_raw_lines()'s output shape is [(page_num, line), ...] with
 page_num always None for markdown.
 """
-from acctfinder import _split_dual_column_tables, group_rows_by_code, parse_pipe_tables
+from financialReports.acctfinder import _split_dual_column_tables, group_rows_by_code, parse_pipe_tables
 from core.numbers import nth_value
 from core.tables import percent_stride_map
 

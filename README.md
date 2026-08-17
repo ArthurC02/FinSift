@@ -15,7 +15,7 @@ account_code_finder/
               build_manual_excel.py / build_fictional_excel.py（一次性的 Excel 產生腳本）
 ```
 
-四支程式都從 repo 根目錄執行，例如 `python src/acctfinder.py <folder> summary`。`data/` 裡的檔案是用 `Path(__file__).parent.parent` 定位的，所以就算從別的工作目錄、用絕對路徑呼叫（`python C:\...\src\runfinder.py`）也一定找得到。`archive/` 裡的東西不在任何執行路徑上，純粹留著備查。金管會資料集的下載快取會落在 repo 根目錄的 `npl_cache/`（已列入 `.gitignore`）。
+現在只有一個進入點：`src/userInteractions/runfinder.py`。不帶子命令就是自動分類＋合併輸出；帶 `acct` / `call` / `npl` 則轉給對應套件原本的 CLI，旗標完全不變（例如 `python src/userInteractions/runfinder.py acct <folder> summary`）。`data/` 裡的檔案是用 `Path(__file__).resolve().parent.parent.parent` 從 repo 根目錄定位的（模組移進套件後多了一層），所以從別的工作目錄、用絕對路徑呼叫也一定找得到。`archive/` 裡的東西不在任何執行路徑上，純粹留著備查。金管會資料集的下載快取會落在 repo 根目錄的 `npl_cache/`（已列入 `.gitignore`）。
 
 ## 依產業分類的科目代碼字典（金控業 / 金融業 / 保險業）
 
@@ -42,7 +42,7 @@ account_code_finder/
 `callfinder.py` 是**另一個獨立的進入點**，給法人說明會（法說會）逐字稿用，它的用詞完全不同（例如 NIM、存放利差、逾放比），也沒有綁定固定代碼——你要根據自己在掃描的是哪一種 `.md` 檔案，明確選擇執行其中一支程式。
 
 ```
-python src/callfinder.py <term> --folder <folder> --config data/con_call_terms.json [--export csv] [-v]
+python src/userInteractions/runfinder.py call <term> --folder <folder> --config data/con_call_terms.json [--export csv] [-v]
 ```
 
 **詞彙比對分兩層**，依照 `Bank_Term_Weighted_Decomposition.xlsx`（`con_call_terms.json` 就是從這份原始字典產生的——共32個詞彙，涵蓋 NIM、存放利差/放款均率/存款均率、存放比、逾放比/逾期放款覆蓋率、CIR、企業放款/房貸/個人放款/信用卡循環/其他放款、法說會放款餘額合計/法說會外幣放款、總資產/淨收益/利息淨收益/手續費淨收益/評價及已實現/其他非利息收益、營業費用/員工福利費用/折舊及攤銷費用/其他費用/呆帳提存(沖回)、稅前淨利/所得稅費用/稅後淨利、ROA(稅後年化)/ROE(稅後年化)、活存比(餘額))：
@@ -65,7 +65,7 @@ python src/callfinder.py <term> --folder <folder> --config data/con_call_terms.j
 ### 精選摘要（預設模式）
 
 ```
-python src/callfinder.py [summary] --folder <folder> --config data/con_call_terms.json [--export csv] [-v]
+python src/userInteractions/runfinder.py call [summary] --folder <folder> --config data/con_call_terms.json [--export csv] [-v]
 ```
 
 不帶 `<term>`（或明確帶 `summary`）執行時，只回報一組固定、跟業務相關的子集——**不是**完整的32詞字典，因為其中好幾個詞彙（總資產、淨收益、稅前/稅後淨利、ROA/ROE 等）在概念上跟 `acctfinder.py` 的財報抽取重疊，不希望出現在法說會的輸出裡：
@@ -87,7 +87,7 @@ pip install openpyxl
 ## 使用方式
 
 ```
-python src/acctfinder.py <folder> <statement> [--coding <path>] [--period N] [--export csv] [-v]
+python src/userInteractions/runfinder.py acct <folder> <statement> [--coding <path>] [--period N] [--export csv] [-v]
 ```
 
 - `<folder>`：要掃描的 `.md` 檔案資料夾（會遞迴搜尋子資料夾）。只有真正包含目標報表章節標題的檔案才會被掃描——其他檔案會被跳過。
@@ -106,7 +106,7 @@ python src/acctfinder.py <folder> <statement> [--coding <path>] [--period N] [--
 ## ROA / ROE
 
 ```
-python src/acctfinder.py <folder> ratios [--coding <path>] [--export csv] [-v]
+python src/userInteractions/runfinder.py acct <folder> ratios [--coding <path>] [--export csv] [-v]
 ```
 
 **主要來源：申報機構自己揭露的獲利能力表格。** 台灣的金控申報文件會直接揭露 ROA/ROE——資產報酬率（ROA）和淨值報酬率（ROE），各自拆成稅前/稅後,加上純益率，涵蓋合併集團跟每個子公司，同時有本期跟去年同期。只會顯示**稅後**數字（稅前會從輸出中拿掉，但內部仍會解析以維持欄位位置正確）。因為揭露的數字是年初至今的累計數——不是年化的——所以會同時顯示原始揭露數字跟一個年化版本（× 4/季數）。輸出格式是每個 (期間, 實體) 一列：`period | entity | quarter | roa_posttax | roa_posttax_annualized | roe_posttax | roe_posttax_annualized | profit_margin | source_file`。`N/A` 代表該指標在申報文件裡顯示為 `-`（該實體/期間沒有揭露）。使用官方揭露表格時，`--export csv` 會寫出 `profitability_export.csv`。
@@ -126,7 +126,7 @@ python src/acctfinder.py <folder> ratios [--coding <path>] [--export csv] [-v]
 ## 全部報表＋比率一起執行
 
 ```
-python src/acctfinder.py <folder> all [--coding <path>] [--export csv] [-v]
+python src/userInteractions/runfinder.py acct <folder> all [--coding <path>] [--export csv] [-v]
 ```
 
 一次執行 `balance_sheet`、`income_statement`、`cash_flow`、`ratios`。
@@ -139,7 +139,7 @@ python src/acctfinder.py <folder> all [--coding <path>] [--export csv] [-v]
 ## 精選銀行別摘要（`summary`）
 
 ```
-python src/acctfinder.py <folder> summary [--bank 國泰] [--export csv] [-v]
+python src/userInteractions/runfinder.py acct <folder> summary [--bank 國泰] [--export csv] [-v]
 ```
 
 一組固定、精選的特定代碼，加上兩個複合/衍生詞彙，用於跨銀行比較（國泰、中信、北富銀、玉山）——`--bank` 決定套用哪家銀行專屬的代碼覆寫跟公式。`--bank` 可以用簡稱或完整的替代名稱（例如 `北富銀` 跟 `台北富邦銀行`/`臺北富邦銀行` 是等價的）；完全不指定的話，會自動掃描資料夾裡第一個 `.md` 檔（通常是封面頁）尋找任何一家銀行的名稱來偵測。如果明確指定的 `--bank` 跟自動偵測都無法判斷銀行，工具會直接報錯，而不是用猜的。跟上面整份報表傾印模式不同的地方：
@@ -235,9 +235,9 @@ account_code_finder/
               build_manual_excel.py / build_fictional_excel.py (one-off Excel generators)
 ```
 
-All four scripts are run from the repo root, e.g. `python src/acctfinder.py <folder> summary`.
-Files under `data/` are located via `Path(__file__).parent.parent`, so invoking a script by
-absolute path from any working directory (`python C:\...\src\runfinder.py`) still resolves them.
+All four scripts are run from the repo root, e.g. `python src/userInteractions/runfinder.py acct <folder> summary`.
+Files under `data/` are located via `Path(__file__).resolve().parent.parent.parent` - three levels up from `src/<package>/`, not two, since the modules moved into packages. So invoking a script by
+absolute path from any working directory (`python C:\...\src/userInteractions/runfinder.py`) still resolves them.
 Nothing in `archive/` is on any execution path — it is kept for reference only. The FSC dataset
 download cache lands in `npl_cache/` at the repo root (already in `.gitignore`).
 
@@ -303,7 +303,7 @@ vocabulary is completely different (e.g. NIM, 存放利差, 逾放比) and isn't
 you explicitly run one script or the other depending on which kind of `.md` files you're scanning.
 
 ```
-python src/callfinder.py <term> --folder <folder> --config data/con_call_terms.json [--export csv] [-v]
+python src/userInteractions/runfinder.py call <term> --folder <folder> --config data/con_call_terms.json [--export csv] [-v]
 ```
 
 **Term matching is two-layer**, per `Bank_Term_Weighted_Decomposition.xlsx` (the source dictionary
@@ -361,7 +361,7 @@ that real deck:
 ### Curated summary (default mode)
 
 ```
-python src/callfinder.py [summary] --folder <folder> --config data/con_call_terms.json [--export csv] [-v]
+python src/userInteractions/runfinder.py call [summary] --folder <folder> --config data/con_call_terms.json [--export csv] [-v]
 ```
 
 Running with no `<term>` (or explicitly `summary`) reports only a fixed, business-relevant subset
@@ -411,7 +411,7 @@ pip install openpyxl
 ## Usage
 
 ```
-python src/acctfinder.py <folder> <statement> [--coding <path>] [--period N] [--export csv] [-v]
+python src/userInteractions/runfinder.py acct <folder> <statement> [--coding <path>] [--period N] [--export csv] [-v]
 ```
 
 - `<folder>`: folder of `.md` files to scan (searched recursively). Only files that actually
@@ -448,7 +448,7 @@ the target period's value is just the Nth comma-grouped number found in that row
 ## ROA / ROE
 
 ```
-python src/acctfinder.py <folder> ratios [--coding <path>] [--export csv] [-v]
+python src/userInteractions/runfinder.py acct <folder> ratios [--coding <path>] [--export csv] [-v]
 ```
 
 **Primary source: the filer's own reported 獲利能力 (profitability) table.** Taiwanese financial
@@ -490,7 +490,7 @@ number is parsed from the ROC-calendar date in the balance sheet page's title (e
 ## All statements + ratios together
 
 ```
-python src/acctfinder.py <folder> all [--coding <path>] [--export csv] [-v]
+python src/userInteractions/runfinder.py acct <folder> all [--coding <path>] [--export csv] [-v]
 ```
 
 Runs `balance_sheet`, `income_statement`, `cash_flow`, and `ratios` in one pass.
@@ -510,7 +510,7 @@ layout, or the underlying figures behind the manual fallback).
 ## Curated per-bank summary (`summary`)
 
 ```
-python src/acctfinder.py <folder> summary [--bank 國泰] [--export csv] [-v]
+python src/userInteractions/runfinder.py acct <folder> summary [--bank 國泰] [--export csv] [-v]
 ```
 
 A fixed, curated set of specific codes plus two composite/derived terms, for cross-bank

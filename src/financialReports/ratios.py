@@ -17,7 +17,7 @@ from core.lookup import find_code_value
 from core.numbers import parse_numeric, nth_value, format_value, annualize, format_pct
 from core.tables import build_raw_lines, restrict_section, parse_pipe_tables, _split_row, _is_table_divider
 from core.text import despace_cjk, _contains_any, _is_toc_like, page_num, strip_footnote
-from entities import BANK_NAME_ALIASES, SUMMARY_CODE_OVERRIDES, SUMMARY_LABEL_FALLBACKS
+from financialReports.entities import BANK_NAME_ALIASES, SUMMARY_CODE_OVERRIDES, SUMMARY_LABEL_FALLBACKS
 
 
 

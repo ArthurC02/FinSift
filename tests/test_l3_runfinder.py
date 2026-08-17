@@ -9,7 +9,7 @@ import sys
 
 import pytest
 
-import runfinder as rf
+from userInteractions import runfinder as rf
 
 
 def rows(tag):

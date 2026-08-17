@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-import acctfinder as af
+from financialReports import acctfinder as af
 
 
 def run_cli(monkeypatch, *argv):

@@ -15,10 +15,10 @@ from core.industry import INDUSTRY_CODING_FILES, detect_industry_category
 from core.lookup import build_code_index, find_value_by_label
 from core.numbers import format_pct, format_maybe_pct
 from core.text import page_num
-from entities import (BANK_PROFILES, COMPOSITE_TERMS, _PROFILE_FIELDS, SUMMARY_CODE_OVERRIDES,
+from financialReports.entities import (BANK_PROFILES, COMPOSITE_TERMS, _PROFILE_FIELDS, SUMMARY_CODE_OVERRIDES,
                       SUMMARY_CODE_OVERRIDES_FINSUM, SUMMARY_CODE_DERIVATIONS,
                       SUMMARY_LABEL_FALLBACKS)
-from ratios import collect_roa_roe
+from financialReports.ratios import collect_roa_roe
 
 
 

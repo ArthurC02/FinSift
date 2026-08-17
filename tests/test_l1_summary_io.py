@@ -11,8 +11,8 @@ correctly is a legitimate refactor and must not be blocked.
 """
 import csv
 
-import acctfinder
-import callfinder
+from financialReports import acctfinder
+from earningsCalls import callfinder
 
 FIN_ROW = {
     "term": "資產總計", "value": 1234567, "is_percent": False,

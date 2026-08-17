@@ -5,7 +5,7 @@ silently reports the wrong quarter rather than failing.
 """
 import pytest
 
-from callfinder import _normalize_year, _rank_periods, parse_period_label
+from earningsCalls.callfinder import _normalize_year, _rank_periods, parse_period_label
 
 # --------------------------------------------------------------------------
 # §3.5 parse_period_label - ECT (14)

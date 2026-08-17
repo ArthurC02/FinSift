@@ -34,12 +34,12 @@ from core.numbers import parse_numeric, nth_value, format_value, annualize, form
 # modules, but `acctfinder.X` stays the address every caller and test already
 # uses (runfinder, tools/ab.py, and the monkeypatch targets in
 # test_l1_coding.py all reach through here).
-from entities import (BANK_PROFILES, BANKS, BANK_NAME_ALIASES, COMPOSITE_TERMS,
+from financialReports.entities import (BANK_PROFILES, BANKS, BANK_NAME_ALIASES, COMPOSITE_TERMS,
                       SUMMARY_CODE_OVERRIDES, SUMMARY_CODE_OVERRIDES_FINSUM,
                       SUMMARY_LABEL_FALLBACKS, SUMMARY_CODE_DERIVATIONS,
                       _PROFILE_FIELDS, _invert_composites, resolve_bank_name,
                       bank_candidates, detect_bank, bank_detection_message)
-from ratios import (collect_roa_roe, collect_ratio_rows, compute_ratios,
+from financialReports.ratios import (collect_roa_roe, collect_ratio_rows, compute_ratios,
                     find_profitability_entries, find_profitability_files,
                     extract_metrics, extract_single_entity_profitability_tables,
                     extract_transposed_entity_tables, group_rows_by_entity,
@@ -50,7 +50,7 @@ from ratios import (collect_roa_roe, collect_ratio_rows, compute_ratios,
                     _ROA_PLAUSIBLE_MIN, _ROA_PLAUSIBLE_MAX,
                     _ROE_PLAUSIBLE_MIN, _ROE_PLAUSIBLE_MAX,
                     _ROA_ROE_CROSSCHECK_DIVERGENCE_FACTOR)
-from summary import (SUMMARY_LAYOUT, INDUSTRY_SUMMARY_LAYOUTS, summary_layout_error,
+from financialReports.summary import (SUMMARY_LAYOUT, INDUSTRY_SUMMARY_LAYOUTS, summary_layout_error,
                      apply_cost_sign, _validate_profiles, collect_summary_rows,
                      collect_summary_rows_finsum, summary_coverage_warning,
                      print_summary_rows, write_summary_csv, _SUMMARY_NA_WARN_RATIO)

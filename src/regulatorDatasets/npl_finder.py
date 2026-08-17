@@ -98,7 +98,10 @@ CC_UNIT = "新臺幣千元"
 NPL_RATIO_HEADER = "逾放比率(%)"
 NPL_COVERAGE_HEADER = "備抵呆帳/逾期放款(%)"
 
-_CACHE_DIR = Path(__file__).parent.parent / "npl_cache"
+# Repo root is THREE levels up from src/<package>/, not two. This module
+# moved down a directory; the same expression silently pointed at src/
+# instead. See core/industry.py, where exactly this bit once.
+_CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "npl_cache"
 
 _USER_AGENT = "Mozilla/5.0 (compatible; npl_finder/2.0)"
 

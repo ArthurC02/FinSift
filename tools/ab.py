@@ -26,9 +26,19 @@ FIXTURES = REPO / "tests" / "fixtures"
 
 SRC = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else REPO / "src"
 sys.path.insert(0, str(SRC))
-import npl_finder
+# Imported so this ONE harness runs against both the flat layout (modules
+# directly under src/) and the package layout (src/financialReports/... etc).
+# That is not tidiness: A/B is the only check that a restructure changed no
+# behaviour, and it can only say so if the same harness reads both trees.
+try:
+    from regulatorDatasets import npl_finder
+    from financialReports import acctfinder as af
+    from earningsCalls import callfinder as cf
+    from userInteractions import runfinder as rf
+except ModuleNotFoundError:
+    import npl_finder
+    import acctfinder as af, callfinder as cf, runfinder as rf
 npl_finder._fetch_url = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("network stubbed"))
-import acctfinder as af, callfinder as cf, runfinder as rf
 
 FIX, DECK, DECK2 = FIXTURES / "fixture", FIXTURES / "deck", FIXTURES / "deck2"
 out = []

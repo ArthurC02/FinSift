@@ -6,10 +6,10 @@ pipeline.
 """
 import pytest
 
-import acctfinder as af
-import callfinder as cf
-import npl_finder as npl
-import runfinder as rf
+from financialReports import acctfinder as af
+from earningsCalls import callfinder as cf
+from regulatorDatasets import npl_finder as npl
+from userInteractions import runfinder as rf
 
 CODES = {"10000": "資產", "20000": "負債", "30000": "權益",
          "40000": "收益", "50000": "費用", "60000": "淨利"}

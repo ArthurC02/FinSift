@@ -7,15 +7,15 @@ wrong. §5.8 covers the remaining decision helpers plus two crash paths.
 """
 import pytest
 
-import acctfinder as af
-import callfinder as cf
+from financialReports import acctfinder as af
+from earningsCalls import callfinder as cf
 # Stubs go on the module whose globals the consumer actually reads, not on the
 # acctfinder facade that re-exports the name. compute_ratios and
 # collect_roa_roe live in ratios.py; collect_summary_rows lives in summary.py
 # and binds collect_roa_roe into its own namespace at import. Patching `af`
 # would install a stub nothing looks at - green tests exercising real code.
-import ratios
-import summary
+from financialReports import ratios
+from financialReports import summary
 
 # --------------------------------------------------------------------------
 # §5.2 collect_roa_roe / build - priority table (11 rules)

@@ -13,7 +13,7 @@
 
 ### 只改一個地方
 
-`src/acctfinder.py` 的 `BANK_PROFILES`：
+`src/financialReports/acctfinder.py` 的 `BANK_PROFILES`：
 
 ```python
 "永豐": {
@@ -54,7 +54,7 @@
 
 ```bash
 python -m pytest                      # _validate_profiles 會在 import 時擋下不完整的 profile
-python src/acctfinder.py <新機構資料夾> summary -v
+python src/userInteractions/runfinder.py acct <新機構資料夾> summary -v
 ```
 
 **必看**：輸出有沒有 `WARNING: N of M summary rows are N/A`。過半 N/A 代表解析沒讀懂這家的版面，不是這家沒揭露。
@@ -117,8 +117,8 @@ INDUSTRY_SUMMARY_LAYOUTS["保險業"] = [
 除了標準協定，另外要：
 
 ```bash
-python src/acctfinder.py <新產業資料夾> summary -v      # 逐列看 matched_label 是否對得上
-python src/acctfinder.py <新產業資料夾> balance_sheet   # 確認字典本身載得起來
+python src/userInteractions/runfinder.py acct <新產業資料夾> summary -v      # 逐列看 matched_label 是否對得上
+python src/userInteractions/runfinder.py acct <新產業資料夾> balance_sheet   # 確認字典本身載得起來
 ```
 
 **逐列核對 `matched_label`（文件自己的措辭）與 `term`（我們的標準化名稱）語意是否一致。** 這正是保險業那個 bug 的形狀：數字解析完全正確、標籤完全錯誤。
@@ -159,7 +159,7 @@ python src/acctfinder.py <新產業資料夾> balance_sheet   # 確認字典本�
 
 ```bash
 python -m pytest tests/test_l0_terms.py
-python src/callfinder.py --folder <法說會資料夾> -v      # 看 matched_label 是不是預期那列
+python src/userInteractions/runfinder.py call --folder <法說會資料夾> -v      # 看 matched_label 是不是預期那列
 ```
 
 ---

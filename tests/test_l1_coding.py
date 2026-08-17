@@ -7,8 +7,8 @@ wrong answer rather than by raising.
 """
 import pytest
 
-import acctfinder as af
-from acctfinder import _extract_coding_block, _find_coding_blocks, restrict_section
+from financialReports import acctfinder as af
+from financialReports.acctfinder import _extract_coding_block, _find_coding_blocks, restrict_section
 
 
 def md(*lines):

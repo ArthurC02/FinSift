@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-import acctfinder
-import callfinder
-from callfinder import Component, TermSpec, match_strength
+from financialReports import acctfinder
+from earningsCalls import callfinder
+from earningsCalls.callfinder import Component, TermSpec, match_strength
 
 
 def exact(aliases, negative=None):
@@ -64,8 +64,27 @@ def write_config(tmp_path, spec):
 
 def test_the_bundled_configs_still_load():
     # The validation is worthless if it rejects the real thing.
-    bundled = Path(acctfinder.__file__).parent.parent / "data" / "con_call_terms.json"
+    #
+    # Anchored on the repo root via this test file, not by walking up from a
+    # module's __file__ - that walk is exactly what broke when the modules
+    # moved down into packages, and it would break again on the next move
+    # while still looking correct.
+    bundled = Path(__file__).resolve().parent.parent / "data" / "con_call_terms.json"
+    assert bundled.is_file(), bundled
     assert len(callfinder.load_terms(bundled)) > 1
+
+
+def test_every_bundled_data_path_a_module_computes_actually_resolves():
+    """The __file__-relative walks that survive in src/. Three of them were one
+    level short after the package move, and only this one had a test. A path
+    that resolves to nowhere fails at the first open, not in parsing, so it is
+    worth pinning all of them in one place."""
+    from earningsCalls import callfinder as cf
+    from userInteractions import runfinder as rf
+    assert Path(rf._DEFAULT_CONFIG).is_file(), rf._DEFAULT_CONFIG
+    assert (cf._REPO_ROOT / "data" / "con_call_terms.json").is_file()
+    for industry, path in acctfinder.INDUSTRY_CODING_FILES.items():
+        assert Path(path).is_file(), f"{industry}: {path}"
 
 
 def test_E7_a_malformed_component_names_the_file_and_the_term(tmp_path):

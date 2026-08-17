@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-import acctfinder
-import callfinder
-import npl_finder
+from financialReports import acctfinder
+from earningsCalls import callfinder
+from regulatorDatasets import npl_finder
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

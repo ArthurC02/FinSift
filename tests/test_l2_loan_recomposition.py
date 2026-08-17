@@ -10,8 +10,8 @@ actually CALLING each one, which is what this file does - all 9 lambdas across
 """
 import pytest
 
-import callfinder
-from callfinder import LOAN_RECOMPOSITION, TermSpec
+from earningsCalls import callfinder
+from earningsCalls.callfinder import LOAN_RECOMPOSITION, TermSpec
 
 # 十億元, roughly the magnitudes real decks print.
 RAW = {
@@ -182,7 +182,7 @@ def test_a_mapped_entity_whose_lookup_returns_nothing_is_not_called_unmapped(mon
     npl_finder's own network call that is stubbed out (AGENTS.md: a run that
     truly reaches banking.gov.tw is a harness failure, not a result).
     """
-    import npl_finder
+    from regulatorDatasets import npl_finder
     monkeypatch.setattr(npl_finder, "_fetch_url",
                         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("network stubbed")))
     by_term = run_summary(monkeypatch, tmp_path, dict(BALANCED), bank="國泰",

@@ -40,11 +40,11 @@
 ## 1. 現況盤點
 
 ```
-src/acctfinder.py   2,166 行   CLI + Excel 字典 + markdown 解析 + 數值 + 報表擷取
+src/financialReports/acctfinder.py   2,166 行   CLI + Excel 字典 + markdown 解析 + 數值 + 報表擷取
                                + 獲利能力 3 layout + 比率計算 + 策展摘要 + CSV + tkinter
-src/callfinder.py   1,331 行   從 acctfinder 匯入 13 個名字
-src/runfinder.py      479 行   同時匯入 acctfinder 與 callfinder，並自帶一份 page_num
-src/npl_finder.py     445 行   刻意獨立，無跨模組匯入
+src/earningsCalls/callfinder.py   1,331 行   從 acctfinder 匯入 13 個名字
+src/userInteractions/runfinder.py      479 行   同時匯入 acctfinder 與 callfinder，並自帶一份 page_num
+src/regulatorDatasets/npl_finder.py     445 行   刻意獨立，無跨模組匯入
                     ─────
                     4,421 行   測試覆蓋率 0%
 ```
@@ -209,9 +209,9 @@ call/   terms.py periods.py tables.py summary.py
 
 **前置門檻：** Phase 1e 的 34 條 L3/L4 案例全綠；若 Phase 4 跳過，仍不得略過這個門檻。
 
-`acctfinder.py` / `callfinder.py` / `runfinder.py` 的 `main()` 與 argparse 設定移到 `src/cli/`，原檔留兩行 wrapper 以維持 `python src/acctfinder.py ...` 不變。
+`acctfinder.py` / `callfinder.py` / `runfinder.py` 的 `main()` 與 argparse 設定移到 `src/cli/`，原檔留兩行 wrapper 以維持 `python src/userInteractions/runfinder.py acct ...` 不變。
 
-**這一步會改變 `Path(__file__)` 的深度**（`src/cli/acct.py` 比 `src/acctfinder.py` 深一層），`callfinder` 的 `--config` 預設值要跟著調。TEST_DESIGN §3.9 的 PA1–PA4 正是為此存在。
+**這一步會改變 `Path(__file__)` 的深度**（`src/cli/acct.py` 比 `src/financialReports/acctfinder.py` 深一層），`callfinder` 的 `--config` 預設值要跟著調。TEST_DESIGN §3.9 的 PA1–PA4 正是為此存在。
 
 同時處理 Phase 3 延後的 `af.`/`cf.` 限定名重繫結。
 

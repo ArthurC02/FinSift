@@ -4,8 +4,8 @@ The profitability layouts and the entity-row grouper. Four of these six pin
 known-wrong behaviour: each one produces a plausible number rather than an
 error, so nothing downstream notices.
 """
-import acctfinder as af
-from callfinder import _row_sections
+from financialReports import acctfinder as af
+from earningsCalls.callfinder import _row_sections
 
 
 def md(*lines):

@@ -7,7 +7,7 @@ reason onto the row's own `note`, and pin that it survives into the export.
 """
 import csv
 
-import acctfinder as af
+from financialReports import acctfinder as af
 
 # Real entity name so detect_industry_category resolves, and nothing else:
 # every code lookup then legitimately comes up empty.

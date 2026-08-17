@@ -6,10 +6,10 @@ number rather than a crash.
 """
 import pytest
 
-import acctfinder as af
-import npl_finder as npl
-import runfinder as rf
-from callfinder import _add, _sub
+from financialReports import acctfinder as af
+from regulatorDatasets import npl_finder as npl
+from userInteractions import runfinder as rf
+from earningsCalls.callfinder import _add, _sub
 
 # --------------------------------------------------------------------------
 # §3.4 apply_cost_sign - Decision Table (6)

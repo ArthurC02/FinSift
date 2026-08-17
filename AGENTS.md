@@ -10,10 +10,10 @@
 
 | 進入點 | 做什麼 |
 |---|---|
-| `src/acctfinder.py` | 財報擷取的 CLI 與逐表 dump。**用法定科目代碼精確比對**，不是文字比對。也是門面：`summary` / `ratios` / `entities` 的公開名稱都從這裡再匯出，所以 `acctfinder.X` 一律有效 |
-| `src/callfinder.py` | 法說會簡報擷取。文字比對，詞彙定義在 `data/con_call_terms.json` |
-| `src/runfinder.py` | 自動判斷資料夾是財報還是法說會，跑對應的擷取器並合併輸出 |
-| `src/npl_finder.py` | 抓金管會銀行局公開月報。**刻意完全獨立**，不匯入其他三個 |
+| `src/financialReports/acctfinder.py` | 財報擷取的 CLI 與逐表 dump。**用法定科目代碼精確比對**，不是文字比對。也是門面：`summary` / `ratios` / `entities` 的公開名稱都從這裡再匯出，所以 `acctfinder.X` 一律有效 |
+| `src/earningsCalls/callfinder.py` | 法說會簡報擷取。文字比對，詞彙定義在 `data/con_call_terms.json` |
+| `src/userInteractions/runfinder.py` | 自動判斷資料夾是財報還是法說會，跑對應的擷取器並合併輸出 |
+| `src/regulatorDatasets/npl_finder.py` | 抓金管會銀行局公開月報。**刻意完全獨立**，不匯入其他三個 |
 
 財報側再往下分三層，**單向**、不得回頭：
 
@@ -48,7 +48,8 @@ acctfinder（CLI + 逐表 dump）
 ```powershell
 python -m pytest            # V1 行為
 python tools\undefined.py   # V3 缺漏 import（含巢狀在 dict 裡的 lambda）
-foreach ($m in 'acctfinder','callfinder','runfinder','npl_finder') { python "src\$m.py" --help }
+python src\userInteractions\runfinder.py --help                      # V2 四個 CLI
+foreach ($c in 'acct','call','npl') { python src\userInteractions\runfinder.py $c --help }
 python tools\ab.py <改動前的 src> > before.txt   # V4 A/B 位元組比對
 ```
 
