@@ -78,13 +78,15 @@ def test_cathay_has_no_recomposition():
 ALL_TERMS = callfinder.RATIO_TERMS + callfinder.BALANCE_TERMS + callfinder.HELPER_TERMS
 
 
-def run_summary(monkeypatch, tmp_path, values, bank="國泰"):
+def run_summary(monkeypatch, tmp_path, values, bank="國泰", gov_names=None):
     """Drive collect_con_call_summary with canned matches instead of a deck.
 
-    _GOV_BANK_NAMES is emptied so the regulator lookup can never reach the
-    network - see TEST_DESIGN §6.4.
+    _GOV_BANK_NAMES is emptied by default so the regulator lookup can never
+    reach the network - see TEST_DESIGN §6.4. An empty table is ALSO exactly
+    the unmapped-entity state, so a test that needs a mapped entity passes
+    `gov_names` and stubs npl_finder's own network call instead.
     """
-    monkeypatch.setattr(callfinder, "_GOV_BANK_NAMES", {})
+    monkeypatch.setattr(callfinder, "_GOV_BANK_NAMES", gov_names or {})
     monkeypatch.setattr(callfinder, "detect_con_call_quarter", lambda folder: 4)
     monkeypatch.setattr(callfinder, "detect_con_call_year", lambda folder: 2025)
     monkeypatch.setattr(
@@ -135,3 +137,62 @@ def test_reconciliation_note_silent_exactly_at_tolerance(monkeypatch, tmp_path):
     # off by exactly 2.5: the check is `> tolerance`, so this must stay quiet.
     by_term = run_summary(monkeypatch, tmp_path, dict(BALANCED, 法說會放款餘額合計=2844.9))
     assert by_term["法說會放款餘額合計"]["note"] == ""
+
+
+# --------------------------------------------------------------------------
+# Regulator-sourced rows: why they're empty, not just that they are
+# --------------------------------------------------------------------------
+
+NO_CARD = {k: v for k, v in BALANCED.items() if k != "信用卡循環"}
+
+
+def test_an_unmapped_entity_says_so_on_every_row_it_blocks(monkeypatch, tmp_path):
+    """BANK_PROFILES has ten entities; _GOV_BANK_NAMES maps four. The six added
+    from 114Q4 filings are deliberately unmapped - the key has to be the exact
+    string the FSC spreadsheet prints, and this repo must not reach
+    banking.gov.tw to find out. So the gap is real and permanent until someone
+    reads a regulator file; what it must not be is silent.
+
+    run_summary empties _GOV_BANK_NAMES for network safety (§6.4), which is
+    also precisely the unmapped-entity state, so this needs no extra setup.
+    """
+    by_term = run_summary(monkeypatch, tmp_path, dict(NO_CARD), bank="兆豐")
+    for term in ("逾放比率", "備抵呆帳/逾期放款"):
+        assert by_term[term]["individual"] is None
+        assert "no FSC regulator name mapped" in by_term[term]["note"]
+    # 信用卡循環 takes the regulator only as a FALLBACK, so it is annotated
+    # here only because this deck disclosed no figure of its own.
+    assert "no FSC regulator name mapped" in by_term["信用卡循環"]["note"]
+
+
+def test_a_deck_that_discloses_the_card_figure_is_not_annotated(monkeypatch, tmp_path):
+    """The fallback was never needed, so the mapping gap is not this row's
+    problem - saying otherwise would send a reader after the wrong thing."""
+    by_term = run_summary(monkeypatch, tmp_path, dict(BALANCED), bank="兆豐")
+    assert by_term["信用卡循環"]["value"] == 22.2
+    assert by_term["信用卡循環"]["note"] == ""
+
+
+def test_a_mapped_entity_whose_lookup_returns_nothing_is_not_called_unmapped(monkeypatch, tmp_path):
+    """The note has to mean something. A mapped bank whose fetch simply failed
+    is a network/site problem, not a missing mapping, and the two need
+    different fixes.
+
+    The mapping is restored here, so the real regulator path DOES run - it is
+    npl_finder's own network call that is stubbed out (AGENTS.md: a run that
+    truly reaches banking.gov.tw is a harness failure, not a result).
+    """
+    import npl_finder
+    monkeypatch.setattr(npl_finder, "_fetch_url",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("network stubbed")))
+    by_term = run_summary(monkeypatch, tmp_path, dict(BALANCED), bank="國泰",
+                          gov_names={"國泰": "國泰世華商業銀行"})
+    for term in ("逾放比率", "備抵呆帳/逾期放款"):
+        assert by_term[term]["individual"] is None
+        assert by_term[term]["note"] == ""
+
+
+def test_every_gov_bank_name_key_is_a_real_entity():
+    """A key that no longer matches a BANK_PROFILES name would silently never
+    be looked up - _GOV_BANK_NAMES.get(bank) just returns None."""
+    assert set(callfinder._GOV_BANK_NAMES) <= set(callfinder.PRIMARY_BANK_ENTITIES)

@@ -56,12 +56,13 @@ from pathlib import Path
 from core.text import _contains_any, page_num
 from core.numbers import parse_numeric, format_pct, format_maybe_pct
 from core.tables import build_raw_lines, restrict_section, parse_pipe_tables
-from acctfinder import (
-    derive_quarter_num,
-    pick_folder,
-    detect_bank,
-    BANK_PROFILES,
-)
+# Imported from the modules that actually own these, not through the
+# acctfinder facade. Reaching through acctfinder pulled the whole fin_report
+# stack (summary -> ratios -> entities) in to get four names, and made this
+# module look like it depended on summary extraction, which it does not.
+from entities import BANK_PROFILES, detect_bank
+from ratios import derive_quarter_num
+from acctfinder import pick_folder
 
 # Windows consoles often default to cp1252, which can't print CJK output.
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
@@ -949,12 +950,37 @@ NPL_COVERAGE_TERM = "備抵呆帳/逾期放款"
 
 # This project's short bank names -> the exact legal names the FSC regulator
 # spreadsheets use in their own bank-name column (see npl_finder.TARGET_BANKS).
+#
+# DELIBERATELY NOT extended to the six entities added to BANK_PROFILES from
+# their 114Q4 filings. The key here has to be the string the FSC's own
+# spreadsheet prints, which is not necessarily a filing's registered name and
+# cannot be established without reading a real regulator file - and this repo
+# must not reach banking.gov.tw to find out (see AGENTS.md). Guessing
+# "兆豐國際商業銀行" and being one character off looks exactly like a bank the
+# regulator didn't publish that month. So an unmapped entity is refused rather
+# than guessed, and now says so (see gov_name_note) instead of producing
+# unexplained N/A rows.
 _GOV_BANK_NAMES = {
     "北富銀": "台北富邦商業銀行",
     "國泰": "國泰世華商業銀行",
     "玉山": "玉山商業銀行",
     "中信": "中國信託商業銀行",
 }
+
+
+def gov_name_note(bank):
+    """Why the regulator-sourced rows are N/A for `bank`, or "" if they
+    shouldn't be. Same reasoning as the fin_report side: an N/A row and a
+    correctly-extracted one are indistinguishable once exported, and "this
+    entity was never mapped to a regulator name" is a different problem from
+    "the regulator dataset was unreachable"."""
+    if not bank:
+        return "no entity resolved for this deck, so no regulator lookup was attempted"
+    if bank not in _GOV_BANK_NAMES:
+        return (f"'{bank}' has no FSC regulator name mapped (see _GOV_BANK_NAMES) - "
+                f"the mapping needs the exact string the regulator's own spreadsheet "
+                f"prints, which has not been confirmed for this entity")
+    return ""
 
 
 def _add(*values):
@@ -1120,15 +1146,19 @@ def collect_con_call_summary(folder, terms, verbose=False, bank=None):
     """Build the curated con-call summary. Returns a list of row dicts with
     TWO different shapes - write_summary_csv branches on `kind`, so anything
     else reading these rows has to as well:
-      - ratio terms: {term, kind: "ratio", individual,
-                      period_label, matched_label, source_file}
+      - ratio terms: {term, kind: "ratio", individual, period_label,
+                      matched_label, source_file, note}
         (the value lives in `individual`, NOT in `value` - there is no
         `value` key on a ratio row at all)
       - balance terms: {term, kind: "balance", value, period_label,
                         matched_label, source_file, is_percent, note}
-        `note` carries the loan-reconciliation warning (see
-        _LOAN_RECONCILE_TOLERANCE) and reaches the exported CSV, so it is
-        part of this contract rather than an internal detail.
+    `note` is on BOTH shapes (ratio rows carry it too) and reaches the
+    exported CSV, so it is part of this contract rather than an internal
+    detail. It carries the loan-reconciliation warning (see
+    _LOAN_RECONCILE_TOLERANCE) on the loan total, and on the
+    regulator-sourced rows (逾放比率, 備抵呆帳/逾期放款, and 信用卡循環 when
+    the deck itself disclosed nothing) the reason that lookup produced
+    nothing - see gov_name_note.
     CIR is no longer produced here - see acctfinder.SUMMARY_LAYOUT (moved to
     the fin_report summary, computed directly from the same filing's
     營業費用/淨收益 with no crosscheck against this deck's figures - see
@@ -1151,7 +1181,7 @@ def collect_con_call_summary(folder, terms, verbose=False, bank=None):
         found = find_term_value(folder, terms[name], verbose=verbose,
                                  prefer_quarterly=True, primary_aliases=primary_aliases)
         rows.append({
-            "term": name, "kind": "ratio",
+            "term": name, "kind": "ratio", "note": "",
             "individual": found[1] if found else None,
             "matched_label": found[0] if found else None,
             "period_label": found[3] if found else None,
@@ -1249,8 +1279,10 @@ def collect_con_call_summary(folder, terms, verbose=False, bank=None):
     for term, (formula, description) in LOAN_RECOMPOSITION.get(bank, {}).items():
         recomposed[term] = (formula(raw_values), description)
 
+    cc_note = gov_name_note(bank) if raw["信用卡循環"]["value"] is None else ""
     for name in BALANCE_TERMS:
-        row = dict(raw[name], term=name, kind="balance", note="")
+        row = dict(raw[name], term=name, kind="balance",
+                   note=cc_note if name == "信用卡循環" else "")
         if name in recomposed:
             value, description = recomposed[name]
             row["value"] = value
@@ -1273,16 +1305,18 @@ def collect_con_call_summary(folder, terms, verbose=False, bank=None):
                 f"(off by {diff:,.1f}) - a component may have matched the wrong row, or a "
                 f"recomposition rule may not hold for this filing")
 
-    rows.append({
-        "term": NPL_RATIO_TERM, "kind": "ratio", "individual": npl_ratio_value,
-        "matched_label": f"金管會公布（{npl_ratio_period}）" if npl_ratio_value is not None else None,
-        "period_label": npl_ratio_period, "source_file": None,
-    })
-    rows.append({
-        "term": NPL_COVERAGE_TERM, "kind": "ratio", "individual": coverage_value,
-        "matched_label": f"金管會公布（{coverage_period}）" if coverage_value is not None else None,
-        "period_label": coverage_period, "source_file": None,
-    })
+    # These two exist only if the regulator lookup ran. When it didn't, say
+    # which reason - an unmapped entity is a different problem from a
+    # dataset that was unreachable, and they need different fixes.
+    gov_note = gov_name_note(bank)
+    for term, value, period in ((NPL_RATIO_TERM, npl_ratio_value, npl_ratio_period),
+                                 (NPL_COVERAGE_TERM, coverage_value, coverage_period)):
+        rows.append({
+            "term": term, "kind": "ratio", "individual": value,
+            "matched_label": f"金管會公布（{period}）" if value is not None else None,
+            "period_label": period, "source_file": None,
+            "note": gov_note if value is None else "",
+        })
     return rows
 
 
