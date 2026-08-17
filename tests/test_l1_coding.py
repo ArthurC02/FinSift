@@ -137,3 +137,15 @@ def test_K8_revised_wins_over_original_on_conflict(tmp_path):
         ["10000", "舊名稱", "10000", "新名稱"],
     ])
     assert af.load_code_dictionary(path, "balance_sheet")["10000"] == "新名稱"
+
+
+def test_every_industry_coding_workbook_path_actually_resolves():
+    """These are absolute paths built from __file__. When the table moved from
+    src/acctfinder.py to src/core/industry.py, the same
+    `__file__.parent.parent / "data"` silently started pointing at src/data/ -
+    and nothing went red, because summary mode never opens a workbook and the
+    per-statement tests all build their own. A path that resolves to nowhere
+    is not a parsing bug; it is an unopenable file at the very first step."""
+    from pathlib import Path
+    for industry, path in af.INDUSTRY_CODING_FILES.items():
+        assert Path(path).is_file(), f"{industry}: {path}"
