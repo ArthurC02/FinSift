@@ -1,0 +1,1090 @@
+{
+  "總資產": {
+    "type": "composite",
+    "aliases": [
+      "總資產",
+      "資產總額"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "資產",
+          "Assets",
+          "Asset"
+        ],
+        "weight": 0.75
+      },
+      {
+        "terms": [
+          "總",
+          "總額",
+          "合計",
+          "總計",
+          "Total"
+        ],
+        "weight": 0.25
+      }
+    ]
+  },
+  "淨收益": {
+    "type": "composite",
+    "aliases": [
+      "淨收益",
+      "營收",
+      "營業收入",
+      "Total Net Revenues",
+      "Net revenues",
+      "Total revenues"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "收益",
+          "收入",
+          "Revenue",
+          "Income"
+        ],
+        "weight": 0.65
+      },
+      {
+        "terms": [
+          "淨",
+          "淨額",
+          "合計",
+          "Net",
+          "Total"
+        ],
+        "weight": 0.35
+      }
+    ],
+    "negative_terms": [
+      "利息淨收益",
+      "利息淨收入",
+      "手續費淨收益",
+      "手續費淨收入",
+      "非利息淨收益",
+      "非利息淨收入",
+      "其他淨收益",
+      "其他淨收入"
+    ]
+  },
+  "利息淨收益": {
+    "type": "composite",
+    "aliases": [
+      "利息淨收益",
+      "NII"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "利息",
+          "Interest",
+          "息"
+        ],
+        "weight": 0.55
+      },
+      {
+        "terms": [
+          "淨收益",
+          "淨收入",
+          "淨額",
+          "Net Income",
+          "Net Revenue"
+        ],
+        "weight": 0.45
+      }
+    ]
+  },
+  "手續費淨收益": {
+    "type": "composite",
+    "aliases": [
+      "手續費淨收益",
+      "手續費及佣金淨收益",
+      "NFI"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "手續費",
+          "佣金",
+          "Fee",
+          "Commission"
+        ],
+        "weight": 0.6
+      },
+      {
+        "terms": [
+          "淨收益",
+          "淨收入",
+          "淨額",
+          "Net"
+        ],
+        "weight": 0.4
+      }
+    ]
+  },
+  "評價及已實現": {
+    "type": "composite",
+    "aliases": [
+      "評價及已實現",
+      "金融資產評價及已實現損益"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "評價",
+          "評價損益",
+          "Valuation",
+          "Mark to Market"
+        ],
+        "weight": 0.35
+      },
+      {
+        "terms": [
+          "已實現",
+          "實現",
+          "Realized",
+          "Realised"
+        ],
+        "weight": 0.35
+      },
+      {
+        "terms": [
+          "損益",
+          "利益",
+          "Gains",
+          "Gain",
+          "Profit"
+        ],
+        "weight": 0.3
+      }
+    ]
+  },
+  "其他非利息收益": {
+    "type": "composite",
+    "aliases": [
+      "其他非利息收益",
+      "其他非利息淨收益"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "非利息",
+          "非利收",
+          "Non Interest",
+          "Noninterest"
+        ],
+        "weight": 0.6
+      },
+      {
+        "terms": [
+          "其他",
+          "Other",
+          "Others"
+        ],
+        "weight": 0.4
+      }
+    ]
+  },
+  "營業費用": {
+    "type": "exact",
+    "aliases": [
+      "營業費用",
+      "營運費用",
+      "營業支出",
+      "營運支出",
+      "Operating Expense",
+      "OPEX",
+      "Operating expenses",
+      "Total operating expenses"
+    ]
+  },
+  "員工福利費用": {
+    "type": "composite",
+    "aliases": [
+      "員工福利費用"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "員工福利",
+          "員工",
+          "人事",
+          "用人",
+          "薪資",
+          "Employee",
+          "Personnel",
+          "Staff"
+        ],
+        "weight": 0.7
+      },
+      {
+        "terms": [
+          "費用",
+          "支出",
+          "成本",
+          "Expense",
+          "Cost",
+          "Costs"
+        ],
+        "weight": 0.3
+      }
+    ]
+  },
+  "折舊及攤銷費用": {
+    "type": "composite",
+    "aliases": [
+      "折舊及攤銷費用",
+      "D&A"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "折舊",
+          "Depreciation"
+        ],
+        "weight": 0.4
+      },
+      {
+        "terms": [
+          "攤銷",
+          "攤提",
+          "Amortization",
+          "Amortisation"
+        ],
+        "weight": 0.4
+      },
+      {
+        "terms": [
+          "費用",
+          "支出",
+          "Expense"
+        ],
+        "weight": 0.2
+      }
+    ]
+  },
+  "其他費用": {
+    "type": "composite",
+    "aliases": [
+      "其他費用",
+      "其他營業費用"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "費用",
+          "支出",
+          "開支",
+          "Expense",
+          "Cost"
+        ],
+        "weight": 0.55
+      },
+      {
+        "terms": [
+          "其他",
+          "Other",
+          "Others"
+        ],
+        "weight": 0.45
+      }
+    ]
+  },
+  "呆帳提存(沖回)": {
+    "type": "composite",
+    "aliases": [
+      "呆帳提存(沖回)",
+      "預期信用損失（呆帳費用）",
+      "ECL"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "呆帳",
+          "備抵呆帳",
+          "信用損失",
+          "預期信用損失",
+          "放款損失",
+          "Credit Loss",
+          "Loan Loss",
+          "Bad Debt"
+        ],
+        "weight": 0.45
+      },
+      {
+        "terms": [
+          "提存",
+          "準備",
+          "提列",
+          "費用",
+          "Provision",
+          "Expense"
+        ],
+        "weight": 0.4
+      },
+      {
+        "terms": [
+          "沖回",
+          "迴轉",
+          "回沖",
+          "Reversal",
+          "Writeback"
+        ],
+        "weight": 0.15
+      }
+    ]
+  },
+  "稅前淨利": {
+    "type": "composite",
+    "aliases": [
+      "稅前淨利",
+      "PBT",
+      "EBT"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "淨利",
+          "利益",
+          "純益",
+          "盈餘",
+          "Profit",
+          "Income",
+          "Earnings"
+        ],
+        "weight": 0.5
+      },
+      {
+        "terms": [
+          "稅前",
+          "所得稅前",
+          "Before Tax",
+          "Pretax",
+          "Pre-tax"
+        ],
+        "weight": 0.5
+      }
+    ],
+    "negative_terms": [
+      "稅後"
+    ]
+  },
+  "所得稅費用": {
+    "type": "composite",
+    "aliases": [
+      "所得稅費用"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "所得稅",
+          "稅務",
+          "稅",
+          "Income Tax",
+          "Tax"
+        ],
+        "weight": 0.7
+      },
+      {
+        "terms": [
+          "費用",
+          "支出",
+          "Expense",
+          "Expenses"
+        ],
+        "weight": 0.3
+      }
+    ]
+  },
+  "稅後淨利": {
+    "type": "composite",
+    "aliases": [
+      "稅後淨利",
+      "PAT"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "淨利",
+          "純益",
+          "本期淨利",
+          "本期純益",
+          "盈餘",
+          "Net Income",
+          "Net Profit",
+          "Net Earnings"
+        ],
+        "weight": 0.55
+      },
+      {
+        "terms": [
+          "稅後",
+          "所得稅後",
+          "After Tax",
+          "Post-tax"
+        ],
+        "weight": 0.45
+      }
+    ],
+    "negative_terms": [
+      "稅前"
+    ]
+  },
+  "ROA(稅後年化)": {
+    "type": "composite",
+    "aliases": [
+      "ROA(稅後年化)",
+      "資產報酬率",
+      "ROA"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "資產報酬率",
+          "平均資產報酬率",
+          "ROA",
+          "Return on Assets",
+          "Return on Average Assets"
+        ],
+        "weight": 0.85
+      },
+      {
+        "terms": [
+          "年化",
+          "Annualized",
+          "Annualised",
+          "Ann."
+        ],
+        "weight": 0.08
+      },
+      {
+        "terms": [
+          "稅後",
+          "After Tax",
+          "Post-tax"
+        ],
+        "weight": 0.07
+      }
+    ],
+    "negative_terms": [
+      "權益",
+      "Equity",
+      "ROE"
+    ]
+  },
+  "ROE(稅後年化)": {
+    "type": "composite",
+    "aliases": [
+      "ROE(稅後年化)",
+      "股東權益報酬率",
+      "ROE"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "股東權益報酬率",
+          "權益報酬率",
+          "ROE",
+          "Return on Equity",
+          "Return on Average Equity"
+        ],
+        "weight": 0.85
+      },
+      {
+        "terms": [
+          "年化",
+          "Annualized",
+          "Annualised",
+          "Ann."
+        ],
+        "weight": 0.08
+      },
+      {
+        "terms": [
+          "稅後",
+          "After Tax",
+          "Post-tax"
+        ],
+        "weight": 0.07
+      }
+    ],
+    "negative_terms": [
+      "資產報酬率",
+      "Return on Assets",
+      "ROA"
+    ]
+  },
+  "活存比(餘額)": {
+    "type": "composite",
+    "aliases": [
+      "活存比(餘額)",
+      "活期性存款比率",
+      "CASA"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "活存",
+          "活期存款",
+          "活期性存款",
+          "CASA",
+          "Demand Deposit",
+          "Current and Savings Account"
+        ],
+        "weight": 0.6
+      },
+      {
+        "terms": [
+          "比",
+          "比率",
+          "占比",
+          "Ratio",
+          "Mix"
+        ],
+        "weight": 0.3
+      },
+      {
+        "terms": [
+          "餘額",
+          "平均餘額",
+          "Balance",
+          "Average Balance"
+        ],
+        "weight": 0.1
+      }
+    ]
+  },
+  "NIM": {
+    "type": "exact",
+    "aliases": [
+      "淨利息收益率",
+      "淨息差",
+      "淨利差",
+      "淨利息邊際",
+      "NIM",
+      "Net Interest Margin"
+    ]
+  },
+  "存放利差": {
+    "type": "exact",
+    "aliases": [
+      "存放利差",
+      "單季存放利差",
+      "整體利差",
+      "Spread"
+    ],
+    "negative_terms": [
+      "台幣",
+      "臺幣",
+      "外幣",
+      "新台幣",
+      "新臺幣"
+    ]
+  },
+  "放款均率": {
+    "type": "composite",
+    "aliases": [
+      "放款均率",
+      "放款平均利率",
+      "放款利率",
+      "單季放款利率",
+      "放款收益率"
+    ],
+    "negative_terms": [
+      "台幣",
+      "臺幣",
+      "外幣",
+      "新台幣",
+      "新臺幣"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "放款",
+          "貸款",
+          "授信",
+          "Loan",
+          "Loans",
+          "Lending"
+        ],
+        "weight": 0.5
+      },
+      {
+        "terms": [
+          "均率",
+          "平均利率",
+          "收益率",
+          "殖利率",
+          "Yield",
+          "Average Rate",
+          "Rate"
+        ],
+        "weight": 0.5
+      }
+    ]
+  },
+  "存款均率": {
+    "type": "composite",
+    "aliases": [
+      "存款均率",
+      "存款平均利率",
+      "存款利率",
+      "單季存款利率",
+      "存款成本率"
+    ],
+    "negative_terms": [
+      "台幣",
+      "臺幣",
+      "外幣",
+      "新台幣",
+      "新臺幣"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "存款",
+          "存",
+          "Deposit",
+          "Deposits"
+        ],
+        "weight": 0.5
+      },
+      {
+        "terms": [
+          "均率",
+          "平均利率",
+          "成本率",
+          "付息率",
+          "資金成本",
+          "Cost of Deposits",
+          "Average Rate"
+        ],
+        "weight": 0.5
+      }
+    ]
+  },
+  "存放比": {
+    "type": "exact",
+    "aliases": [
+      "存放比",
+      "存放款比率",
+      "放存比",
+      "貸放比",
+      "放款對存款比率",
+      "LDR",
+      "Loan to Deposit Ratio"
+    ],
+    "negative_terms": [
+      "台幣",
+      "臺幣",
+      "外幣",
+      "新台幣",
+      "新臺幣"
+    ]
+  },
+  "逾放比": {
+    "type": "composite",
+    "aliases": [
+      "逾放比",
+      "逾期放款比率",
+      "NPL"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "逾放",
+          "逾期放款",
+          "不良放款",
+          "不良貸款",
+          "不良債權",
+          "NPL",
+          "Non Performing Loan"
+        ],
+        "weight": 0.65
+      },
+      {
+        "terms": [
+          "比",
+          "比率",
+          "率",
+          "Ratio"
+        ],
+        "weight": 0.35
+      }
+    ],
+    "negative_terms": [
+      "覆蓋",
+      "Coverage"
+    ]
+  },
+  "逾期放款覆蓋率": {
+    "type": "composite",
+    "aliases": [
+      "逾期放款覆蓋率",
+      "備抵呆帳覆蓋率",
+      "NPL Coverage"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "覆蓋",
+          "覆蓋率",
+          "Coverage",
+          "Coverage Ratio"
+        ],
+        "weight": 0.6
+      },
+      {
+        "terms": [
+          "逾放",
+          "逾期放款",
+          "不良放款",
+          "備抵呆帳",
+          "呆帳",
+          "NPL",
+          "Allowance",
+          "Loan Loss Reserve"
+        ],
+        "weight": 0.4
+      }
+    ]
+  },
+  "CIR": {
+    "type": "exact",
+    "aliases": [
+      "成本收入比",
+      "成本收益比",
+      "費用收入比",
+      "營業費用率",
+      "CIR",
+      "Cost Income Ratio",
+      "Cost to Income Ratio"
+    ]
+  },
+  "企業放款": {
+    "type": "composite",
+    "aliases": [
+      "企業放款"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "企業",
+          "法人",
+          "公司戶",
+          "商業",
+          "企金",
+          "Corporate",
+          "Commercial",
+          "Business"
+        ],
+        "weight": 0.6
+      },
+      {
+        "terms": [
+          "放款",
+          "貸款",
+          "授信",
+          "融資",
+          "Loans",
+          "Lending",
+          "Credit"
+        ],
+        "weight": 0.4
+      }
+    ],
+    "negative_terms": [
+      "合併基礎"
+    ]
+  },
+  "房貸": {
+    "type": "exact",
+    "aliases": [
+      "房貸",
+      "房屋貸款",
+      "住宅貸款",
+      "購屋貸款",
+      "房屋融資",
+      "住宅抵押貸款",
+      "不動產擔保放款",
+      "Mortgage",
+      "Housing Loan",
+      "Home Loan",
+      "Residential Mortgage"
+    ],
+    "negative_terms": [
+      "合併基礎"
+    ]
+  },
+  "個人放款": {
+    "type": "composite",
+    "aliases": [
+      "個人放款"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "個人",
+          "消費者",
+          "消費性",
+          "消費金融",
+          "零售",
+          "消金",
+          "Consumer",
+          "Retail",
+          "Personal"
+        ],
+        "weight": 0.6
+      },
+      {
+        "terms": [
+          "放款",
+          "貸款",
+          "授信",
+          "Loans",
+          "Lending"
+        ],
+        "weight": 0.4
+      }
+    ]
+  },
+  "信用卡循環": {
+    "type": "composite",
+    "aliases": [
+      "信用卡循環",
+      "信用卡循環信用餘額",
+      "信用卡循環額",
+      "信用卡循環餘額"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "信用卡",
+          "卡",
+          "Credit Card",
+          "Card"
+        ],
+        "weight": 0.55
+      },
+      {
+        "terms": [
+          "循環",
+          "循環信用",
+          "循環餘額",
+          "應收帳款",
+          "Revolving",
+          "Revolving Credit",
+          "Revolving Balance"
+        ],
+        "weight": 0.45
+      }
+    ]
+  },
+  "其他放款": {
+    "type": "composite",
+    "aliases": [
+      "其他放款"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "放款",
+          "貸款",
+          "授信",
+          "Loans",
+          "Lending"
+        ],
+        "weight": 0.5
+      },
+      {
+        "terms": [
+          "其他",
+          "Other",
+          "Others"
+        ],
+        "weight": 0.5
+      }
+    ],
+    "negative_terms": [
+      "合併基礎"
+    ]
+  },
+  "法說會放款餘額合計": {
+    "type": "composite",
+    "aliases": [
+      "法說會放款餘額合計",
+      "放款餘額合計",
+      "總放款"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "放款",
+          "貸款",
+          "授信",
+          "Loans",
+          "Loan",
+          "Lending"
+        ],
+        "weight": 0.45
+      },
+      {
+        "terms": [
+          "餘額",
+          "總額",
+          "Balance",
+          "Balances",
+          "Outstanding"
+        ],
+        "weight": 0.3
+      },
+      {
+        "terms": [
+          "合計",
+          "總",
+          "總計",
+          "Total",
+          "Gross"
+        ],
+        "weight": 0.25
+      }
+    ],
+    "negative_terms": [
+      "合併基礎"
+    ]
+  },
+  "法說會外幣放款": {
+    "type": "composite",
+    "aliases": [
+      "法說會外幣放款",
+      "外幣放款"
+    ],
+    "threshold": 0.8,
+    "components": [
+      {
+        "terms": [
+          "外幣",
+          "外匯",
+          "外幣別",
+          "Foreign Currency",
+          "FC",
+          "FX"
+        ],
+        "weight": 0.55
+      },
+      {
+        "terms": [
+          "放款",
+          "貸款",
+          "授信",
+          "餘額",
+          "Loans",
+          "Loan",
+          "Lending"
+        ],
+        "weight": 0.45
+      }
+    ],
+    "negative_terms": [
+      "合併基礎"
+    ]
+  },
+  "政府放款": {
+    "type": "exact",
+    "aliases": [
+      "政府"
+    ],
+    "search_start": [
+      "授信餘額組成"
+    ]
+  },
+  "信貸": {
+    "type": "exact",
+    "aliases": [
+      "信貸"
+    ],
+    "search_start": [
+      "其他個人授信餘額"
+    ]
+  },
+  "其他個人授信其他": {
+    "type": "exact",
+    "aliases": [
+      "其他"
+    ],
+    "search_start": [
+      "其他個人授信餘額"
+    ]
+  },
+  "海外子行": {
+    "type": "exact",
+    "aliases": [
+      "海外子行"
+    ],
+    "search_start": [
+      "外幣放款成長率"
+    ]
+  },
+  "個人擔保貸款": {
+    "type": "exact",
+    "aliases": [
+      "個人擔保貸款",
+      "個人擔保放款",
+      "Secured Personal Loans",
+      "Secured Personal Loan"
+    ]
+  },
+  "小額信貸": {
+    "type": "exact",
+    "aliases": [
+      "小額信貸",
+      "個人信貸",
+      "Small-amount Credit Loans",
+      "Personal Credit Loans"
+    ]
+  },
+  "海外分行": {
+    "type": "exact",
+    "aliases": [
+      "海外分行"
+    ],
+    "search_start": [
+      "外幣放款成長率"
+    ]
+  },
+  "OBU_DBU": {
+    "type": "exact",
+    "aliases": [
+      "OBU+DBU"
+    ],
+    "search_start": [
+      "外幣放款成長率"
+    ]
+  }
+}

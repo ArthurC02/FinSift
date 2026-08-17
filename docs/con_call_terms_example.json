@@ -1,0 +1,6 @@
+{
+  "_comment": "Placeholder - replace with real earnings-call term definitions once provided. Shape matches financial_keyword_finder's keywords_example.json: each key is a term name, 'aliases' are the phrase(s) matched (substring, case-insensitive) against a table row's leading label cell. 'search_start'/'search_end' are optional section-scoping markers (e.g. a specific speaker's remarks), omit to search the whole file.",
+  "淨利差": {
+    "aliases": ["淨利差", "NIM", "Net Interest Margin"]
+  }
+}
