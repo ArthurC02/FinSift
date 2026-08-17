@@ -91,7 +91,12 @@ def main():
         available[doc.stem] = {anchor_of(h) for h in HEADING_RE.findall(doc.read_text(encoding="utf-8"))}
 
     cited, broken, unpointed = set(), [], []
-    sources = sorted(ROOT.joinpath("src").rglob("*.py")) + sorted(ROOT.joinpath("tools").glob("*.py"))
+    # The per-package AGENTS.md files cite knowledge sections too, as ordinary
+    # markdown links. They rot exactly like a comment's citation does, so they
+    # are scanned on the same terms - only the prose check below is Python-only.
+    sources = (sorted(ROOT.joinpath("src").rglob("*.py"))
+               + sorted(ROOT.joinpath("tools").glob("*.py"))
+               + [ROOT / "AGENTS.md"] + sorted(ROOT.joinpath("src").rglob("AGENTS.md")))
     for path in sources:
         source = path.read_text(encoding="utf-8")
         found_here = 0
@@ -105,7 +110,8 @@ def main():
                               else "no such section")
                     broken.append(f"  {where}: docs/knowledge/{stem}.md#{anchor} - {reason}")
         # The reverse direction: prose that sends the reader nowhere.
-        if not found_here and path.relative_to(ROOT).parts[0] == _MUST_CITE:
+        if (not found_here and path.suffix == ".py"
+                and path.relative_to(ROOT).parts[0] == _MUST_CITE):
             n = prose_lines(source)
             if n >= _PROSE_LINES_NEEDING_A_CITATION:
                 unpointed.append(f"  {path.relative_to(ROOT)}: {n} lines of prose, 0 citations")
