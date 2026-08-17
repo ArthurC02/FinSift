@@ -60,26 +60,14 @@ def compute_ratios(folder, bank, coding_path=None, verbose=False):
     if quarter_num is None:
         raise RuntimeError(f"Couldn't determine the current quarter number from {bs_source}.")
 
-    # net_income IS a year-to-date cumulative figure, not a standalone
-    # current-quarter one - confirmed directly from real filings' own
-    # income-statement column headers: a Q4/annual filing's column reads
-    # "114年度金額" (FY114 amount - the FULL YEAR, e.g. a real 國泰 filing),
-    # while a Q2 filing's column reads "一月一日至六月三十日" (Jan 1 - Jun
-    # 30, i.e. H1 CUMULATIVE, not Q2 alone - a real 中信 filing). An earlier
-    # version of this function assumed the opposite (single-quarter, not
-    # cumulative) and annualized with a flat x4 regardless of quarter - for
-    # a Q4 filing (already the full year) that quadruples an already-annual
-    # figure, which is exactly the ~4x-too-high result three different
-    # banks' Q4 crosschecks showed before this fix. Dividing by quarter_num
-    # first correctly reduces to a no-op at quarter_num=4 (already annual)
-    # and projects a partial-year cumulative figure to a full year otherwise.
-    # A zero average balance is a data problem of the same class as a missing
-    # code, so it has to surface the same way. Letting the division raise
-    # ZeroDivisionError instead broke this function's documented contract
-    # ("Raises RuntimeError ..."), and since ZeroDivisionError is NOT a
-    # subclass of RuntimeError, collect_roa_roe's `except RuntimeError` let it
-    # through and took down the whole run rather than degrading to
-    # "cross-check unavailable" the way every other lookup failure does.
+    # net_income is a YEAR-TO-DATE cumulative figure, so divide by quarter_num
+    # BEFORE annualising - at quarter_num=4 that correctly degrades to a no-op.
+    # Do not "simplify" the division away: assuming single-quarter and applying
+    # a flat x4 made three banks' Q4 figures ~4x too high.
+    # A zero average balance must raise RuntimeError like any other lookup
+    # failure - ZeroDivisionError is NOT a subclass of it, so letting the
+    # division raise took down the whole run instead of degrading.
+    # 欄位標題證據 → docs/knowledge/financialReports.md#手算公式為什麼要先除以季數
     avg_assets = (assets_cur + assets_prev) / 2
     avg_equity = (equity_cur + equity_prev) / 2
     for label, denom in (("資產總計 (10000)", avg_assets), ("權益總計 (30000)", avg_equity)):
@@ -142,7 +130,10 @@ _ROA_ROE_CROSSCHECK_DIVERGENCE_FACTOR = 2.0
 # data across all 4 currently-supported banks this session: ROA(稅後)
 # ranged 0.24%-1.12%, ROE(稅後) ranged 3.33%-15.02%. Allows negative
 # values too, since a quarterly loss is a real result, not a bug - this is
-# a sanity check on magnitude, not a claim about which sign is expected.
+# Deliberately WIDE: a loss quarter is an ordinary input, so this should
+# almost never fire on real data. If it does, suspect a parsing/scale/sign
+# error rather than a real outlier bank.
+# → docs/knowledge/financialReports.md#合理範圍為什麼開得那麼寬
 _ROA_PLAUSIBLE_MIN, _ROA_PLAUSIBLE_MAX = -5.0, 5.0     # percent
 
 
@@ -152,35 +143,23 @@ _ROE_PLAUSIBLE_MIN, _ROE_PLAUSIBLE_MAX = -50.0, 50.0   # percent
 
 
 def collect_roa_roe(folder, bank, coding=None, concall_roa=None, concall_roe=None, verbose=False):
-    """ROA/ROE for the curated fin_report summary, in priority order:
-      1. the filing's own reported 獲利能力 disclosure table (any of the 3
-         layouts - see find_profitability_entries), used AS DISCLOSED, with
-         NO further annualizing applied to it. An earlier version of this
-         project always scaled the disclosed figure by x4/quarter_num,
-         assuming Taiwanese banks uniformly report a not-yet-annualized
-         cumulative rate here. Cross-checking real filings for 3 different
-         banks across 2 periods each disproved that: 中信 and 玉山's Q1
-         disclosed rate was roughly the SAME magnitude as their own Q4
-         rate (already annualized), while 國泰's Q1 rate was roughly 1/4 of
-         its Q4 rate (genuinely not yet annualized) - i.e. the convention
-         is NOT consistent across banks, so blindly scaling is wrong for
-         at least some of them. Showing the as-disclosed number, with an
-         independent cross-check alongside it (see below), is the only
-         choice that doesn't risk silently fabricating a wrong figure.
-      2. concall_roa/concall_roe - an earnings-call deck's own reported
-         figure, supplied by the caller (cli.py) rather than looked
-         up here, since this module can't import decks.py's term
-         matching without a circular dependency.
-      3. this fin folder's own manual formula (compute_ratios) as a last
-         resort, clearly labeled as an approximation.
-    Regardless of which source wins, the manual formula is ALSO computed
-    (when derivable) and returned as a cross-check value - never used to
-    silently override a disclosed/concall figure - with a note when it
-    diverges from the primary value by more than
-    _ROA_ROE_CROSSCHECK_DIVERGENCE_FACTOR, since that gap itself is useful
-    signal (see above) rather than something to hide.
-    Returns {"roa": row_or_None, "roe": row_or_None}, each row a dict with
-    term, value, matched_label, source_file, crosscheck_value, note."""
+    """ROA/ROE for the curated fin_report summary.
+
+    Priority: the filing's own 獲利能力 disclosure table, then the con-call
+    figure the caller supplies, then this filing's manual formula (clearly
+    labelled an approximation). The disclosed figure is used AS DISCLOSED -
+    never re-annualised, because the convention is NOT consistent across banks.
+
+    Whichever wins, the manual formula is ALSO computed and returned as a
+    cross-check. It must never silently override a disclosed figure; a
+    divergence is reported in `note` because the gap itself is signal.
+
+    Returns {"roa": row_or_None, "roe": row_or_None}, each a dict with term,
+    value, matched_label, source_file, crosscheck_value, note.
+
+    三個來源的證據與為什麼不能盲目年化
+      → docs/knowledge/financialReports.md#roaroe-的三個來源
+    """
     entries = find_profitability_entries(folder, verbose=verbose)
     entry = _select_profitability_entry(entries, bank)
 

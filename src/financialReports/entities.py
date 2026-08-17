@@ -22,19 +22,10 @@ from core.industry import detect_industry_category
 
 
 
-# Fallback: when a SUMMARY_LAYOUT code isn't found under its own (possibly
-# bank-overridden) number, some filings' conversions leave that ROW's own
-# leading code cell blank (confirmed in a real 中信 individual filing - the
-# subtotal/aggregate lines simply have no code at all), or the true code
-# differs from what SUMMARY_CODE_OVERRIDES assumes (confirmed in a real 國泰
-# individual filing - "本期淨利" sits at code 61000, not the FHC-consolidated-
-# scope 63000/64000 the override was built around). Both cases are really
-# the same underlying problem: the CODE is unreliable for these particular
-# subtotal/aggregate lines specifically, but the LABEL text is not - these
-# lines use one of a small, consistent set of phrasings across all 4 banks'
-# filings observed so far. Keyed by the code's SUMMARY_LAYOUT/override slot
-# (i.e. the value actually passed to find_code_value), not by whichever
-# literal code happens to hold it in a given filing.
+# Keyed by the SUMMARY_LAYOUT/override code slot (what actually reaches
+# find_code_value), NOT by whichever literal code a given filing uses. Match is
+# whole-cell exact, never substring.
+# 為什麼代碼對小計列不可靠 → docs/knowledge/financialReports.md#一標籤比對summary_label_fallbacks
 SUMMARY_LABEL_FALLBACKS = {
     "10000": ["資產總計", "資產合計"],
     # 淨收益合計 confirmed in a real 第一銀行 114Q4 individual filing - same
@@ -57,23 +48,11 @@ SUMMARY_LABEL_FALLBACKS = {
 
 
 
-# Last resort after both the code match and the label fallback fail: rebuild
-# the line from its own components. Only for lines a filing can legitimately
-# omit entirely - 兆豐 and 第一's real 114Q4 individual filings print 營業費用
-# as a section HEADER with no amounts at all, then the three component rows,
-# then go straight to 稅前淨利. There is no row to match, by code or by label.
-#
-# This is arithmetic, not a guess, and it was checked both ways before being
-# added: on the four 114Q4 filings that DO print 58400 (台新/新光/永豐/華南)
-# the sum of these three reproduces the printed total to the exact dollar,
-# and on the two that don't it closes the filing's own
-# 淨收益 - 呆帳 - 營業費用 = 稅前淨利 walk exactly. The derived row still says
-# so in its note - a figure the filing itself never states must not be
-# indistinguishable from one it does.
-#
-# ponytail: one entry, consulted only on a miss. If a filing ever turns up
-# with a FOURTH opex component, this silently understates - which is why the
-# note names the components it actually summed.
+# Last resort after code AND label both fail. Arithmetic, not a guess -
+# verified both ways before being added. The derived row MUST say so in its
+# note: a figure the filing never states must not look like one it does.
+# ponytail: a filing with a FOURTH opex component would silently understate.
+# 驗證方式與實測數字 → docs/knowledge/financialReports.md#二由組成項重建summary_code_derivations
 SUMMARY_CODE_DERIVATIONS = {
     "58400": ["58500", "59000", "59500"],
 }
@@ -81,68 +60,19 @@ SUMMARY_CODE_DERIVATIONS = {
 
 
 # ---------------------------------------------------------------------------
-# Per-entity profiles.
+# Per-entity profiles. Fields: industries, aliases, primary_entities,
+# code_overrides, code_overrides_finsum, composites. Every older table
+# (BANKS, BANK_NAME_ALIASES, the two override tables, COMPOSITE_TERMS,
+# earningsCalls' PRIMARY_BANK_ENTITIES) is now derived from this one, and
+# _validate_profiles makes an incomplete entity an import-time error.
 #
-# Everything keyed by a reporting entity lives here. It used to live in five
-# separate tables (BANKS, BANK_NAME_ALIASES, SUMMARY_CODE_OVERRIDES,
-# SUMMARY_CODE_OVERRIDES_FINSUM, COMPOSITE_TERMS) plus
-# decks.PRIMARY_BANK_ENTITIES - six edits to add one entity, with nothing
-# checking they all happened. Every one of those names still exists, derived
-# below; only their source moved. _validate_profiles() then makes an
-# incomplete entity an import-time error instead of a silent N/A at run time.
+# 不要從別家複製 composites - 組成代碼真的每家不同（兆豐/第一用 43100 而非
+# 49310，第一另用 43600/45000，華南用 47003）。抄來的是看起來正常的錯數字。
+# 別名不能是日常用語（「第一」會命中每份財報裡的「第一季」，使 detect_bank
+# 對所有資料夾都變成歧義而整批靜默跳過）。
 #
-# FIELDS
-#
-# industries - which coding schemes this entity's filings are written under.
-#   This is what makes the entity axis safe to open up. Aliases have to be
-#   short forms (an earnings-call deck's cover says "玉山金控", never a
-#   registered name), and short forms collide inside a group: "國泰人壽保險股
-#   份有限公司" contains "國泰", so an insurer resolved to its sibling BANK
-#   and inherited that bank's overrides and composites. Scoping detection to
-#   the filing's own industry removes that by construction instead of hoping
-#   the aliases stay distinct. Both bank and FHC schemes are listed for every
-#   entity here because both document types are in scope for these groups -
-#   the override tables were built around FHC-consolidated scope in the first
-#   place (see code_overrides_finsum).
-#
-# aliases - alternate/full names, used both to normalize a --bank value typed
-#   as the full name (e.g. "台北富邦銀行" for 北富銀) and to auto-detect the
-#   entity from a filing's own text when --bank isn't given. "臺"/"台" are
-#   both included since either can appear in a filing.
-#
-# primary_entities - the PRIMARY bank subsidiary each earnings-call deck is
-#   about. A financial-holding deck also reports OTHER bank subsidiaries
-#   (富邦華一銀行 in RMB, 富邦銀行(香港) in HKD, ...) whose tables use
-#   identical row labels (存放比, 總放款, 營業費用) - decks's
-#   _BANK_LABEL_HINT alone can't tell them apart, since every one of them
-#   contains "銀行". Matching a figure from the wrong subsidiary is worse than
-#   reporting nothing: in a real 富邦 deck it produced 存放比 72.17% and
-#   放款餘額 81,769 from the mainland-China subsidiary's RMB-denominated table
-#   instead of 台北富邦銀行's own figures. English/romanized forms are
-#   included because these decks label appendix tables in English ("E.SUN
-#   Bank's Income Statement"); without them such a heading matches
-#   _ENTITY_NAME_RE ("Bank") but not the primary alias, and the bank's own
-#   appendix would be rejected as if it were another company's.
-#
-# code_overrides - per-entity overrides for individual SUMMARY_LAYOUT code
-#   entries (code -> replacement).
-#
-# code_overrides_finsum - same idea for the quarterly SUMMARIZED fin-report
-#   disclosure (see collect_summary_rows_finsum), a DIFFERENT and shorter
-#   document than the full individual filing, confirmed to use a different
-#   code scheme for 稅後淨利 in real 114Q4 filings: 中信 prints no code at all
-#   for that row (label-only - already covered by
-#   SUMMARY_LABEL_FALLBACKS["64000"], no override needed), 北富銀 prints 64000
-#   directly (no override needed either), but 國泰 prints 61000 - NOT 63000
-#   like the full individual filing needs. Kept as its own field rather than
-#   reusing code_overrides since the two document types' schemes genuinely
-#   differ for this entity.
-#
-# composites - this entity's code list for each composite SUMMARY_LAYOUT item.
-#   其他非利息收益 was dropped from the default summary output for a while
-#   (per an earlier standardized-term-list request) and has been re-added;
-#   手續費淨收益 (code 49100, added alongside it) is a plain single-code
-#   SUMMARY_LAYOUT item, not a composite, so it has no entry here.
+# 每個欄位怎麼填、各自為什麼存在（含三起實際事故）
+#   → docs/knowledge/financialReports.md#profile-的六個欄位
 # ---------------------------------------------------------------------------
 
 BANK_PROFILES = {

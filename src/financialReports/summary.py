@@ -88,22 +88,12 @@ SUMMARY_LAYOUT = [
 
 
 
-# SUMMARY_LAYOUT is bank-shaped, and its codes are matched RAW against the
-# document - summary mode never loads an industry coding dictionary (see
-# collect_summary_rows), so nothing about a code carries its own industry
-# with it. The same number means a different account under a different
-# scheme: 58200 is 呆帳提存 under 金融業 but an insurance cost line under
-# 保險業 (see INDUSTRY_CODING_FILES, which documents that difference).
-#
-# Applying this layout to a filing it wasn't built for therefore does NOT
-# fail - it relabels a real, correctly-parsed number. Confirmed on a 國泰
-# 人壽 filing: industry detected as 保險業 correctly, then '保險成本' was
-# emitted under the canonical term '呆帳提存(收回)' with its sign flipped by
-# apply_cost_sign. matched_label still held '保險成本', but term is the field
-# the CSV/Excel exports and _MERGED_TERM_ORDER key on, and standardizing
-# term for cross-entity comparison is this layout's whole purpose.
-#
-# So an industry with no layout of its own is REFUSED, not defaulted.
+# These codes are matched RAW against the document - summary mode never loads
+# an industry coding dictionary, so a code carries no industry with it, and
+# 58200 is 呆帳提存 under 金融業 but an insurance cost line under 保險業.
+# Applying this layout to the wrong industry does NOT fail; it relabels a real,
+# correctly-parsed number. So an industry with no layout is REFUSED, not
+# defaulted. 實際案例（國泰人壽） → docs/knowledge/financialReports.md#summary_layout-為什麼綁死產業
 INDUSTRY_SUMMARY_LAYOUTS = {
     "金融業": SUMMARY_LAYOUT,
     # 金控業 shares the bank layout: the per-bank override tables were built
@@ -450,14 +440,14 @@ _SUMMARY_NA_WARN_RATIO = 0.5
 def summary_coverage_warning(rows, folder=None):
     """A one-line warning when most of a summary came back N/A, else None.
 
-    An N/A row still occupies a line like any other (every SUMMARY_LAYOUT
-    line always appears, see collect_summary_rows), so a filing whose layout
-    this extractor simply failed to read produces output shaped exactly like
-    a successful run. Each N/A row now carries its own reason in `note`, but
-    that is per-row: it says why THIS line is missing, not that the run as a
-    whole went wrong. At four banks the wholesale case was catchable by eye;
-    across the whole sector it is not, and the csv/excel export paths don't
-    even print the rows for anyone to look at.
+    Each N/A row carries its own reason in `note`, but that is per-row: it
+    says why THIS line is missing, not that the run as a whole went wrong. A
+    filing whose layout was simply misread produces output shaped exactly like
+    a successful one, and the csv/excel paths never print the rows for anyone
+    to notice.
+
+    N/A 的六種成因與各自的修法
+      → docs/knowledge/financialReports.md#na-的六種成因
 
     ponytail: one flat ratio over all rows. If it turns out to be noisy, the
     fix is a per-row 'expected N/A' flag in SUMMARY_LAYOUT (活存比 is the
