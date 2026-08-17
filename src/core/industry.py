@@ -8,42 +8,28 @@ imports an extractor.
 """
 from pathlib import Path
 
-# data/ sits at the repo root - THREE levels up from src/core/, not two. This
-# table moved here from what was then src/acctfinder.py (now
-# financialReports/statements.py), where two levels was correct; the
-# move silently pointed every coding-workbook path at src/data/ until this was
-# anchored explicitly. No test caught it, because summary mode never loads a
-# workbook - only the per-statement modes do.
+# data/ sits at the repo root - THREE levels up from src/core/, NOT two. Two
+# levels silently points every coding-workbook path at src/data/, and no test
+# catches it: summary mode never loads a workbook.
 _DATA = Path(__file__).resolve().parent.parent.parent / "data"
 
 
-# ---------------------------------------------------------------------------
-# Industry-category coding dictionaries.
-#
-# The coding workbook comes in 3 industry-specific files instead of one
-# unified scheme, since the same code number can mean a different account
-# depending on industry (e.g. code 58200 is a bad-debt-provision line for
-# 金融業 but an insurance-specific cost line for a filing on the 保險業
-# scheme - confirmed against real filings from different periods/entities).
-# 金控業 = financial holding companies (母公司為金控); 金融業 = banks;
-# 保險業 = life (人壽) and property/casualty (產險) insurers.
-# ---------------------------------------------------------------------------
-
+# THREE industry-specific workbooks, not one unified scheme: the same code
+# number means a different account depending on industry (58200 is 呆帳提存
+# under 金融業 but an insurance cost line under 保險業).
+#   → docs/knowledge/industry-and-layout.md#三份產業科目字典
 INDUSTRY_CODING_FILES = {
     "金控業": str(_DATA / "金控業.xlsx"),
     "金融業": str(_DATA / "金融業.xlsx"),
     "保險業": str(_DATA / "保險業.xlsx"),
 }
 
-# Checked against the reporting entity's own full legal name (as printed in
-# the filing itself), not a bare industry word - "銀行" alone would false-
-# positive on ordinary balance-sheet line items every entity type has (e.g.
-# "銀行存款"/"存放銀行同業"), so these require the specific company-type
-# suffix that only appears as part of an entity's actual registered name.
-# Checked in this order (保險業 first) since a FHC's own filing sometimes
-# also mentions a subsidiary bank/insurer by name - the reporting entity's
-# OWN suffix is what should win, and 人壽/產物保險 names never double as a
-# 金控/銀行 name, so there's no ordering conflict in practice.
+# Matched against the reporting entity's own FULL LEGAL NAME, never a bare
+# industry word: "銀行" alone false-positives on ordinary line items every
+# entity type has ("銀行存款"/"存放銀行同業"). Order matters - 保險業 first,
+# because a FHC filing also names its subsidiaries and the reporting entity's
+# OWN suffix must win.
+#   → docs/knowledge/industry-and-layout.md#產業怎麼判定
 INDUSTRY_CATEGORY_KEYWORDS = [
     ("保險業", ["人壽保險股份有限公司", "產物保險股份有限公司", "人壽保險公司", "產物保險公司"]),
     ("金控業", ["金融控股股份有限公司", "金融控股公司"]),
@@ -53,12 +39,9 @@ INDUSTRY_CATEGORY_KEYWORDS = [
 
 def detect_industry_category(folder):
     """Auto-detect which of INDUSTRY_CATEGORY_KEYWORDS the filing's own
-    reporting entity belongs to, by scanning the first few .md files
-    (sorted) for the entity's full legal name - the cover page doesn't
-    always carry it (confirmed: one real filing's page 007 balance sheet
-    didn't, but page 001's cover title did), so several files are checked
-    rather than just the first. Returns the category name, or None if no
-    file matches any pattern."""
+    reporting entity belongs to, by scanning the first FIVE .md files
+    (sorted) for its full legal name - the cover page does not always carry
+    it. Returns the category name, or None if nothing matches."""
     paths = sorted(Path(folder).rglob("*.md"))[:5]
     text = "".join(p.read_text(encoding="utf-8", errors="ignore") for p in paths)
     for category, keywords in INDUSTRY_CATEGORY_KEYWORDS:

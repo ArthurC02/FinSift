@@ -39,55 +39,15 @@ def derive_quarter_num(doc_path):
 
 
 # ---------------------------------------------------------------------------
-# Reported profitability table (獲利能力): ROA/ROE as directly disclosed by
-# the filer, rather than computed. This is the authoritative source when
-# present - a dedicated section listing 資產報酬率 (ROA) and 淨值報酬率 (ROE),
-# each split into 稅前/稅後 (pretax/posttax), plus 純益率 (profit margin), for
-# the consolidated group (合併) and every subsidiary, for the current quarter
-# and the same quarter last year. Only 稅後 (posttax) figures are surfaced in
-# the output (pretax is parsed internally where needed to keep column
-# position correct, but isn't reported) - both the as-disclosed (cumulative
-# year-to-date) figure and an annualized version (x 4/quarter number) are
-# shown, since the disclosed figure is NOT itself annualized (e.g. a Q1
-# filing's ROA reflects only ~1 quarter of return).
+# Reported profitability table (獲利能力): ROA/ROE as the filer states them.
+# The authoritative source when present. Only 稅後 is surfaced; 稅前 is parsed
+# internally to keep column position correct.
 #
-# Two layouts are supported, both seen in real filings:
-#
-# 1. Row = entity, column = metric (verified against real Cathay .md data,
-#    where the header is plain prose above the table, not a real table
-#    header row):
-#      | 合併獲利能力 | 0.27 | 0.22 | 5.13 | 4.23 | 43.64 |
-#      | 本 公 司 | 3.25 | 3.29 | 4.20 | 4.25 | 98.29 |
-#    Column order is fixed by the regulatory disclosure format: ROA稅前,
-#    ROA稅後, ROE稅前, ROE稅後, 純益率. Period (current quarter vs. same
-#    quarter last year) is a block-level distinction (one table per period,
-#    introduced by a ROC date-RANGE prose line). The 合併獲利能力
-#    (consolidated) row is always cleanly pipe-delimited even where
-#    subsidiary rows below it get corrupted by a stray parenthesis/pipe
-#    artifact, so entity rows are reconstructed via continuation-folding
-#    (like account-code rows) and values are picked by scanning tokens, not
-#    trusting fixed cell counts.
-#
-# 2. Row = metric, column = period (seen in an E.Sun/玉山金控 filing, one
-#    small table per entity, each introduced by a numbered heading line like
-#    "1. 玉山金控及子公司"):
-#      項目          114年12月31日  113年12月31日
-#      資產報酬率  稅前   0.95          0.84
-#                  稅後   0.80          0.68
-#      淨值報酬率  稅前   15.54         13.17
-#                  稅後   13.05         10.68
-#      純益率      37.48         34.34
-#    Entity is a block-level distinction (one table per entity); period is
-#    the column distinction, identified from single ROC dates in the header.
-#    NOTE: this path is built from that filing's raw PDF text (via pypdf),
-#    not yet verified against the actual .md conversion for this layout -
-#    treat as provisional pending validation against real converted output.
-#    It assumes (per user confirmation) that a real header row is present
-#    inside the table for this layout, unlike layout 1 above.
-#
-# Orientation is detected per-table from header content: a header containing
-# ROC dates -> layout 2 (period columns); a header/first-row containing
-# ROA/ROE/稅前/稅後-style text -> layout 1 (metric columns, entity rows).
+# THREE layouts, all seen in real filings - layout 1 (row=entity), layout 2
+# (row=metric, numbered per-entity heading), layout 3 (row=metric, single
+# entity). Layout 2 is PROVISIONAL: built from raw PDF text via pypdf, never
+# verified against a real .md conversion.
+#   → docs/knowledge/ratios.md#獲利能力表有三種版面
 # ---------------------------------------------------------------------------
 
 
@@ -95,12 +55,11 @@ _PROFITABILITY_SECTION_RE = re.compile(r"獲利能力")
 
 
 
-# The company-keyword branch is anchored: an ordinary account name like
-# 存放銀行同業 contains 銀行 but continues past it, and used to be read as an
-# entity row - swallowing the rows beneath it as continuations. The first
-# three alternatives stay PREFIX matches on purpose, so labels like
-# 本公司及子公司 keep working; anchoring those too would trade this false
-# positive for a false negative, which corrupts the primary path instead.
+# The company-keyword branch is ANCHORED; the first three alternatives are
+# deliberately NOT. Keep it that way: unanchoring the fourth reads 存放銀行同業
+# as an entity row and swallows the rows below it, while anchoring the first
+# three breaks 本公司及子公司 - a false negative on the primary path.
+#   → docs/knowledge/entity-resolution.md#獲利能力表的機構列
 _ENTITY_ROW_RE = re.compile(r"^(合併|本\s*公\s*司|國\s*泰|.+(?:銀行|人壽|產險|證券|保險)(?:股份有限公司|公司)?$)")
 
 
@@ -111,13 +70,9 @@ _PERIOD_RANGE_RE = re.compile(
 
 
 
-# Metric tokens are small decimals (not comma-grouped), optionally negative
-# in parens, or a bare "-" placeholder for "not available" - a bare "-"
-# still consumes a position so the fixed ROA稅前/稅後/ROE稅前/稅後/純益率
-# column order is preserved even when one metric is missing.
-# The placeholder alternative covers the full-width dashes too: a "—" used to
-# match nothing, so it held no position and every metric after it in the row
-# was read one column early.
+# A placeholder ("-", and the FULL-WIDTH dashes too) must still consume a
+# position, so the fixed ROA稅前/稅後/ROE稅前/稅後/純益率 column order survives
+# a missing metric. Dropping one shifts every later metric a column early.
 _METRIC_TOKEN_RE = re.compile(r"\(?\s*-?\d+(?:\.\d+)?\s*\)?|[-\u2014\u2013]")
 
 
@@ -218,22 +173,14 @@ _FISCAL_YEAR_RE = re.compile(r"^(\d{2,3})\s*年度$")
 
 def parse_period_header_date(cell):
     """Parse a profitability-table column header into a (year, month, day)
-    sort key, trying every header date format confirmed in a real filing:
-    a single ROC year-month-day ('114年12月31日' - parse_single_date), a
-    dot-separated ROC date ('114.12.31' - a real 中信 filing), a period
-    RANGE ('115年1月1日至3月31日' - a real 國泰 filing, keyed off its END
-    date, the same convention quarter_num_from_period_label uses), or a
-    bare fiscal year ('114年度' - a real 國泰/北富銀 filing). None if the
-    cell matches none of these."""
+    sort key. Four formats, all confirmed in real filings: '114年12月31日',
+    '114.12.31', the range '115年1月1日至3月31日' (keyed off its END date),
+    and the bare fiscal year '114年度'. None if none match.
+      → docs/knowledge/ratios.md#期別標題有四種寫法"""
     cell = cell.strip()
-    # Checked BEFORE parse_single_date: _SINGLE_DATE_RE is unanchored
-    # (.search(), not .match()), so on a RANGE string like '114年1月1日至
-    # 3月31日' it would spuriously match just the embedded START date
-    # ('114年1月1日') and silently mislabel the period by its first day
-    # instead of its correct quarter-end - confirmed on a real 國泰/北富銀
-    # Q1 filing (value still came out right, since both the current and
-    # prior-year columns got the same wrong-but-consistent treatment, but
-    # the displayed period label was wrong).
+    # The RANGE must be checked BEFORE parse_single_date: _SINGLE_DATE_RE is
+    # unanchored, so on a range it matches the embedded START date and labels
+    # the period by its first day instead of its quarter end.
     m = _PERIOD_RANGE_RE.search(cell)
     if m:
         return (int(m.group(1)), int(m.group(4)), int(m.group(5)))
@@ -251,14 +198,11 @@ def parse_period_header_date(cell):
 
 
 
-# A numbered heading only names an ENTITY if it reads like a company name.
-# '1. 玉山金控及子公司' does; '1. 前言' and '2. 重要會計政策之說明' do not, yet
-# _ENTITY_HEADING_RE matches any numbered line at all - so a 前言 on page one
-# used to make every layout-3 table in the file look like layout 2's, and
-# layout 3 skipped the lot.
-# Duplicates decks._ENTITY_NAME_RE's vocabulary. Both belong in core/,
-# but moving them is a refactor and this is a bug-fix commit - see the note
-# added to TEST_DESIGN §7.
+# A numbered heading only names an ENTITY if it reads like a company name:
+# _ENTITY_HEADING_RE matches ANY numbered line, so a '1. 前言' on page one made
+# every layout-3 table in the file look like layout 2's and skipped the lot.
+# Duplicates matching._ENTITY_NAME_RE's vocabulary; both belong in core/ - see
+# TEST_DESIGN §7. → docs/knowledge/entity-resolution.md#為什麼是白名單而不是黑名單
 _ENTITY_HEADING_NAME_RE = re.compile(
     r"銀行|金控|控股|人壽|產險|保險|證券|投信|投顧|公司|Bank|FHC|Holdings|Financial|Life|Securities|Insurance")
 
@@ -267,14 +211,11 @@ _ENTITY_HEADING_NAME_RE = re.compile(
 
 def _has_entity_heading_before(lines, line_idx):
     """True if some earlier line is a numbered heading that names a company -
-    i.e. a table layout 2 has already claimed, which layout 3 must not
-    double-count.
+    a table layout 2 already claimed, which layout 3 must not double-count.
 
-    Deliberately narrows only THIS check, not layout 2's own attribution: if
-    the two disagree about a heading, the same table is extracted twice with
-    the same figures, once under the heading's text and once with entity=None.
-    _select_profitability_entry prefers the entity=None copy (always in
-    scope), so the worst case is a redundant entry, never a lost one.
+    Narrows only THIS check, never layout 2's own attribution: a disagreement
+    then costs a redundant duplicate entry (which _select_profitability_entry
+    resolves toward the entity=None copy), never a lost one.
     """
     for k in range(line_idx - 1, -1, -1):
         m = _ENTITY_HEADING_RE.match(lines[k][1])
@@ -287,17 +228,12 @@ def _has_entity_heading_before(lines, line_idx):
 
 def extract_single_entity_profitability_tables(doc_path, verbose=False):
     """Layout 3 extractor: a flat single-entity 獲利能力 table - the shape
-    actually used by every real INDIVIDUAL (個體) bank filing's own
-    footnote disclosure seen so far (confirmed in real 中信/國泰/玉山
-    filings), unlike layout 1 (entity-name row labels) or layout 2 (a
-    numbered '1. some entity' heading before the table) which both assume
-    a multi-entity comparison table. Here there is exactly one entity - the
-    filing's own bank - so every row is attributed to it (entity: None;
-    the caller already knows which bank the folder belongs to). Skips any
-    table layout 2 already claimed (a numbered entity heading precedes it),
-    so the same table is never double-counted under both layouts. Returns
-    a list of {entity: None, period_label, quarter_num, roa_posttax,
-    roe_posttax, profit_margin, source_file}."""
+    every real INDIVIDUAL (個體) bank filing's footnote disclosure uses so
+    far. Exactly one entity, so every row is attributed to it (entity: None -
+    the caller already knows the folder's bank). Skips any table layout 2
+    already claimed. Returns a list of {entity: None, period_label,
+    quarter_num, roa_posttax, roe_posttax, profit_margin, source_file}.
+      → docs/knowledge/ratios.md#獲利能力表有三種版面"""
     lines = build_raw_lines(doc_path)
     results = []
     for table in parse_pipe_tables(lines):
@@ -365,11 +301,8 @@ def extract_transposed_entity_tables(doc_path, verbose=False):
     results = []
     for table in parse_pipe_tables(lines):
         header = table["header"]
-        # parse_period_header_date, not parse_single_date: the latter is
-        # unanchored, so on a RANGE header ("115年1月1日至3月31日") it matched
-        # the embedded START date and the period was labelled by its first
-        # day instead of its quarter end. Layout 3 already used the
-        # range-aware parser; this extractor never got the same fix.
+        # parse_period_header_date, NOT parse_single_date - the latter is
+        # unanchored and labels a range header by its START date.
         period_cols = [(idx, parse_period_header_date(cell)) for idx, cell in enumerate(header)]
         period_cols = [(idx, key) for idx, key in period_cols if key is not None]
         if not period_cols:

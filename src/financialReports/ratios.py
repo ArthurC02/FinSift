@@ -23,19 +23,17 @@ def compute_ratios(folder, bank, coding_path=None, verbose=False):
     """Compute ROA(稅後年化) and ROE(稅後年化) from the same account codes
     and per-bank override/label-fallback logic SUMMARY_LAYOUT already uses
     (10000=資產, 30000=權益, 64000/63000=稅後淨利 per bank) via
-    find_code_value. It used to go through a section-marker-restricted
-    lookup (find_statement_rows, since deleted as dead code), which turned
-    out to be unreliable in practice (a real 國泰 filing's income-statement
-    page never repeats its own '...綜合損益表' section title, so the marker
-    search silently found nothing even though the code rows were right
-    there) and, separately, used codes (19999/39999/69000) left over from
-    before this project's industry-coding-dictionary rewrite - confirmed
-    absent from the current 金控業/金融業/保險業 workbooks entirely (that
-    mapping was RATIO_CODES, also now deleted). Raises RuntimeError with a
-    clear message if any required code/quarter can't be found.
-    coding_path is unused now (kept as a parameter for backward
-    compatibility with existing callers) since find_code_value doesn't
-    need a coding dictionary - it matches raw document codes directly."""
+    find_code_value. Raises RuntimeError with a clear message if any
+    required code/quarter can't be found.
+
+    Lookup is deliberately NOT restricted to a statement section: a real 國泰
+    filing's income-statement page never repeats its own '...綜合損益表'
+    title, so a marker-restricted search found nothing with the code rows
+    right there.
+      → docs/knowledge/ratios.md#手算公式為什麼要先除以季數
+
+    coding_path is unused (kept for callers) - find_code_value matches raw
+    document codes and needs no coding dictionary."""
     overrides = SUMMARY_CODE_OVERRIDES.get(bank, {})
     net_income_code = overrides.get("64000", "64000")
 
@@ -67,7 +65,7 @@ def compute_ratios(folder, bank, coding_path=None, verbose=False):
     # A zero average balance must raise RuntimeError like any other lookup
     # failure - ZeroDivisionError is NOT a subclass of it, so letting the
     # division raise took down the whole run instead of degrading.
-    # 欄位標題證據 → docs/knowledge/financialReports.md#手算公式為什麼要先除以季數
+    # 欄位標題證據 → docs/knowledge/ratios.md#手算公式為什麼要先除以季數
     avg_assets = (assets_cur + assets_prev) / 2
     avg_equity = (equity_cur + equity_prev) / 2
     for label, denom in (("資產總計 (10000)", avg_assets), ("權益總計 (30000)", avg_equity)):
@@ -116,24 +114,18 @@ def _select_profitability_entry(entries, bank):
 
 
 # Two as-disclosed ROA/ROE readings for the SAME quarter shouldn't diverge
-# by more than this factor if they're measuring the same thing the same
-# way; a bigger gap flags a likely convention mismatch (e.g. one figure is
-# a raw cumulative-YTD number, the other already annualized) worth a human
-# double-check, rather than silently picking one.
+# by more than this factor if they're measuring the same thing the same way;
+# a bigger gap flags a likely convention mismatch worth a human look, rather
+# than silently picking one.
 _ROA_ROE_CROSSCHECK_DIVERGENCE_FACTOR = 2.0
 
 
 
-# Wide, deliberately generous plausibility bounds - catch a grossly
-# implausible value (e.g. a decimal/percent parsing bug producing ~92%
-# instead of ~0.92%), not legitimate variation. Grounded in real observed
-# data across all 4 currently-supported banks this session: ROA(稅後)
-# ranged 0.24%-1.12%, ROE(稅後) ranged 3.33%-15.02%. Allows negative
-# values too, since a quarterly loss is a real result, not a bug - this is
-# Deliberately WIDE: a loss quarter is an ordinary input, so this should
-# almost never fire on real data. If it does, suspect a parsing/scale/sign
-# error rather than a real outlier bank.
-# → docs/knowledge/financialReports.md#合理範圍為什麼開得那麼寬
+# Deliberately WIDE. A loss quarter is an ordinary input, so this should
+# almost never fire on real data - if it does, suspect a parsing/scale/sign
+# error rather than a genuine outlier bank. Do not tighten these to the
+# observed range.
+# 觀測到的實際範圍與這個判斷的界線 → docs/knowledge/ratios.md#合理範圍為什麼開得那麼寬
 _ROA_PLAUSIBLE_MIN, _ROA_PLAUSIBLE_MAX = -5.0, 5.0     # percent
 
 
@@ -158,7 +150,7 @@ def collect_roa_roe(folder, bank, coding=None, concall_roa=None, concall_roe=Non
     value, matched_label, source_file, crosscheck_value, note.
 
     三個來源的證據與為什麼不能盲目年化
-      → docs/knowledge/financialReports.md#roaroe-的三個來源
+      → docs/knowledge/ratios.md#roaroe-的三個來源
     """
     entries = find_profitability_entries(folder, verbose=verbose)
     entry = _select_profitability_entry(entries, bank)
@@ -187,21 +179,15 @@ def collect_roa_roe(folder, bank, coding=None, concall_roa=None, concall_roe=Non
 
         notes = []
         if crosscheck is not None and value:
-            # Compare MAGNITUDES, and treat opposite signs as divergent
-            # outright. The numerator used to be max(value, crosscheck) with
-            # no abs(), so a loss quarter - a perfectly ordinary input, the
-            # plausible range runs down to -5%/-50% - could produce a ratio of
-            # 1.0 or even a negative one and silently pass: max(-3.0, 1.0) is
-            # 1.0, max(-3.0, -1.0) is -1.0. Opposite signs mean one source
-            # says profit and the other says loss, which is the largest
-            # disagreement there is and was likewise never reported.
+            # Compare MAGNITUDES (keep the abs()), and treat opposite signs as
+            # divergent outright. A loss quarter is an ordinary input, so a
+            # plain max() without abs() silently passes: max(-3.0, 1.0) is 1.0.
+            # 為什麼這兩件事都要 → docs/knowledge/ratios.md#交叉核對為什麼比較量級
             magnitude_ratio = max(abs(value), abs(crosscheck)) / min(abs(value), abs(crosscheck) or 1e-9)
             if (value > 0) != (crosscheck > 0) or magnitude_ratio > _ROA_ROE_CROSSCHECK_DIVERGENCE_FACTOR:
                 # Don't assert WHY they diverge - the manual formula's own
-                # single-quarter-net-income x4 assumption is itself unverified
-                # for a Q4/annual filing (where "this period's" net income
-                # code may cover the full year, not just Q4 alone), so a gap
-                # here isn't reliable evidence the disclosed figure is wrong.
+                # assumptions are unverified for a Q4/annual filing, so a gap
+                # is not evidence the disclosed figure is the wrong one.
                 notes.append(f"cross-check diverges: manual formula gives {crosscheck:.2f}% vs {value:.2f}% "
                              f"as-disclosed - could be a real discrepancy, or just this manual formula's own "
                              f"assumptions not holding for this filing; treat as a prompt to look closer, not "

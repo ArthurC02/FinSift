@@ -1,23 +1,20 @@
 """
 Extract account values from a folder of converted markdown (.md) financial
-statements, using a dedicated account-coding dictionary (an .xlsx, e.g.
-"Account Coding.xlsx") instead of keyword/text matching. Since every account
-line already has a fixed code (e.g. "19999", "A00010", "3110") tied 1:1 to
-its account name, a table row is identified in the source document by its
-leading code cell matching the dictionary exactly - no fuzzy/substring
-matching is needed.
+statements, matched by LEGAL ACCOUNT CODE against an industry coding
+dictionary (.xlsx) - never by keyword or substring. Every account line has a
+fixed code (e.g. "19999", "A00010", "3110") tied 1:1 to its name, so a row is
+identified by its leading code cell matching the dictionary exactly.
+  → docs/knowledge/account-codes.md#為什麼用代碼而不是文字
 
-Given a document and a statement type, this pulls every code+value pair
-found in that statement in one pass ("whole statement at once"), rather than
-one account per run.
+Given a document and a statement type, this pulls every code+value pair found
+in that statement in one pass, rather than one account per run.
 
 Usage:
     python statements.py <folder> <statement> --coding "Account Coding.xlsx" [--period 2024/12/31] [--export csv] [-v]
 
-<statement> is one of: balance_sheet, income_statement, cash_flow
-(the fourth sheet in the coding workbook, the equity statement / 權益變動表,
-has a transposed layout - codes as column headers rather than row leaders -
-and is not supported by this tool; requesting it raises a clear error).
+<statement> is one of: balance_sheet, income_statement, cash_flow.
+權益變動表 is not supported - see UNSUPPORTED_STATEMENT_MSG.
+  → docs/knowledge/industry-and-layout.md#權益變動表為什麼不支援
 
 Requires openpyxl to read the coding dictionary (pip install openpyxl).
 """
@@ -45,14 +42,10 @@ from core.tables import percent_stride_map, build_raw_lines, _split_dual_column_
 
 
 def pick_folder():
-    """Open a native folder-selection dialog (tkinter, always bundled with
-    Python on Windows) and return the chosen path, or None if the user
-    cancels. Used as a fallback when <folder> is omitted from the command
-    line, so a folder can be picked by clicking instead of typing/pasting
-    its full path. Opens in Downloads by default - Windows' native dialog
-    otherwise remembers whatever directory some OTHER, unrelated program
-    last used it in, which can land somewhere unhelpful (e.g. an old
-    project's folder) rather than where these .md conversions actually live."""
+    """Open a native folder-selection dialog and return the chosen path, or
+    None if cancelled. Used when <folder> is omitted. Opens in Downloads by
+    default - Windows' native dialog otherwise remembers whatever directory
+    some OTHER, unrelated program last used it in."""
     import tkinter as tk
     from tkinter import filedialog
     root = tk.Tk()
@@ -113,11 +106,9 @@ UNSUPPORTED_STATEMENT_MSG = (
 
 
 def _unmerge_fill(ws):
-    """Return a 2D grid of cell values with every merged range's value
-    copied into each of its member cells - openpyxl otherwise returns None
-    for all but a merge's top-left cell, which would hide most of these
-    sheets' header/title text (the industry coding workbooks make heavy
-    use of merged header cells spanning several columns)."""
+    """Return a 2D grid of cell values with every merged range's value copied
+    into each member cell - openpyxl otherwise returns None for all but the
+    top-left, hiding most of these sheets' header text."""
     max_r, max_c = ws.max_row, ws.max_column
     grid = [[ws.cell(row=r, column=c).value for c in range(1, max_c + 1)] for r in range(1, max_r + 1)]
     for mc in ws.merged_cells.ranges:
@@ -128,23 +119,18 @@ def _unmerge_fill(ws):
     return grid
 
 
-# Header markers distinguishing the "original/pre-revision" code+name block
-# from the "revised/post-revision" one (both are present side by side in
-# each sheet - a reconciliation between the old and new, IFRS17-era, code
-# schemes). Deliberately excludes anything that could ALSO be a real
-# account name (e.g. '資產'/'收益' are legitimate level-1 line-item names,
-# not just header labels) - an early version of this used those as header
-# hints and that caused a real DATA row (code 10000 = '資產') to be misread
-# as a header row, pushing the data-start row past it and silently
-# dropping that code from the dictionary.
+# Header markers telling the pre-revision code+name block from the
+# post-revision one (both sit side by side in each sheet).
+#
+# NEVER add a marker that could ALSO be a real account name: '資產'/'收益' are
+# legitimate level-1 line items, and using them as header hints made a real
+# DATA row (10000 = '資產') read as a header, silently dropping that code.
+# The stop markers exist for the mirror reason - prose columns past them get
+# picked up as the "name" by the longest-non-code-text rule below.
+#   → docs/knowledge/industry-and-layout.md#科目字典工作簿怎麼讀
 _CODING_ORIG_MARKERS = ["原會計項目及代碼", "修正前會計項目及代碼", "修訂前現金流量表項目及代碼", "修正前"]
 _CODING_REV_MARKERS = ["修正後會計項目及代碼", "修訂後現金流量表項目及代碼", "修正後"]
 _CODING_HEADER_HINTS = ["代碼", "會計項目", "一級", "二級", "三級", "四級"]
-# Columns after these headers are explanatory prose (why a code changed, a
-# free-text remark), not code/name data - including them in a block's
-# column span lets their long text get picked up as the "name" (via the
-# longest-non-code-text heuristic below) instead of the real, much
-# shorter, account name.
 _CODING_STOP_MARKERS = ["修正說明", "備註"]
 
 
@@ -266,15 +252,11 @@ def extract_statement(doc_path, statement, code_dict, period=1, verbose=False):
       {code, name, label_in_doc, value, page_num, confidence}
     (possibly empty if nothing in this file matches).
 
-    If the statement's section marker (e.g. "資產負債表") isn't found in
-    this file, the WHOLE file is scanned unrestricted rather than skipped -
-    some conversions split one statement per file without repeating its
-    title on the data page itself (confirmed against a real 北富銀 filing,
-    where the title only appears in the table of contents), so requiring
-    the marker would silently produce zero results for an entire folder of
-    otherwise-correct data. Matching is by exact code equality regardless,
-    so scanning unrestricted doesn't risk false positives the way a looser
-    text search would.
+    If the statement's section marker isn't found in this file, the WHOLE
+    file is scanned unrestricted rather than skipped - matching is by exact
+    code equality, so this risks no false positives, whereas requiring the
+    marker silently produced zero results for whole folders.
+      → docs/knowledge/industry-and-layout.md#逐報表模式找不到區段標記時
     """
     spec = STATEMENTS[statement]
     lines = build_raw_lines(doc_path)
@@ -417,10 +399,8 @@ def main():
         ap.error("--period must be 1 or greater (1 = the most recent period).")
 
     if args.statement == "equity_statement":
-        # Kept in `choices` so --help still lists it and the user gets THIS
-        # message rather than "invalid choice". It used to reach
-        # load_code_dictionary and surface as a bare ValueError traceback,
-        # despite the docstring promising a clear error.
+        # Kept in `choices` so --help lists it and the user gets THIS message
+        # rather than "invalid choice" or a bare ValueError traceback.
         ap.error(UNSUPPORTED_STATEMENT_MSG)
 
     if args.folder is None:

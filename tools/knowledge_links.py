@@ -29,7 +29,12 @@ KNOWLEDGE = ROOT / "docs" / "knowledge"
 # Written without a literal example on purpose: this file is scanned like any
 # other source, so an illustrative citation here would be checked as a real one
 # (it was, and it failed - which is at least the tool working).
-CITATION_RE = re.compile(r"docs/knowledge/([\w.]+)\.md#([\w-]+)")
+# The stem class must include '-': the knowledge docs are named by TOPIC
+# (account-codes, entity-resolution), and a stem class of [\w.] silently
+# matched nothing at all for those - every citation to them counted as
+# uncited rather than as broken, so the tool reported 0 broken while checking
+# none of them.
+CITATION_RE = re.compile(r"docs/knowledge/([\w.-]+)\.md#([\w-]+)")
 # A markdown heading, reduced to the anchor GitHub would generate for it.
 HEADING_RE = re.compile(r"^#{2,6}\s+(.+?)\s*$", re.M)
 

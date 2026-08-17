@@ -3,35 +3,18 @@ Fetch two FSC 銀行局 public monthly disclosure datasets for the tracked banks
 
   1. 逾期放款總額 (total overdue/NPL loans) - "本國銀行資產品質評估分析統計表"
      unit: 新臺幣百萬元 (NT$ million)
-  2. 循環信用餘額 (credit-card revolving balance, i.e. 信用卡循環) -
-     "信用卡重要業務及財務資訊揭露", unit: 新臺幣千元 (NT$ thousand)
+  2. 循環信用餘額 (信用卡循環) - "信用卡重要業務及財務資訊揭露"
+     unit: 新臺幣千元 (NT$ thousand)
 
-(2) exists because not every bank's earnings-call deck discloses 信用卡循環
-on its own - 中信's deck folds it into 信用貸款與其他 and never breaks it
-out, and 國泰's deck reports only an aggregate 信用卡放款 - yet the con-call
-loan recomposition needs it as a standalone figure. This regulator dataset
-reports it uniformly for every bank, every month, so it's a reliable
-fallback when (and only when) a deck lacks its own number.
+Standalone by design - no import from the other three packages - so it can be
+tested and scheduled on its own.
 
-Standalone by design (no import from statements/decks/cli) so it
-can be tested and scheduled on its own; decks.py calls
-fetch_for_quarter() from here for the con-call fallback path.
-
-Page layout (confirmed against real downloads, 2026-07):
-  - Both pages are plain server-rendered HTML - every month's link is
-    already in the page source, no JavaScript rendering needed.
-  - The two sites use DIFFERENT filename conventions, so each gets its own
-    period-extraction regex rather than one shared guess:
-      NPL:         '...統計表115_05(2).xlsx'  -> ROC year 115, month 5
-                   (the '(N)' suffix is an inconsistent revised re-upload)
-      credit card: '.../11412_信用卡重要資訊揭露.zip' -> ROC 114, month 12
-                   (YYYMM concatenated, and the spreadsheet is inside a ZIP
-                   alongside an .ods twin - the page labels it "excel&ods")
-  - In both cases "latest" is found by parsing every link's (year, month)
-    and taking the max, never by constructing a URL from a naming formula.
-  - Both spreadsheets are one flat sheet: a header row, then one row per
-    bank. Column positions are located by HEADER TEXT, not a fixed index,
-    so a future column reordering doesn't silently return the wrong metric.
+Two invariants that must not be "simplified":
+  - "latest" is found by parsing every link's (year, month) and taking the
+    max, NEVER by constructing a URL from a naming formula.
+  - column positions are located by HEADER TEXT, never a fixed index, so a
+    future column reordering can't silently return the wrong metric.
+  → docs/knowledge/regulator-datasets.md#兩個資料集
 
 Usage:
     python disclosures.py                    # latest month of both datasets
@@ -82,47 +65,41 @@ CC_BANK_HEADER = "金融機構名稱"
 CC_VALUE_HEADER = "循環信用餘額"
 CC_UNIT = "新臺幣千元"
 
-# 逾放比率/備抵呆帳(逾期放款覆蓋率) live on the SAME "本國銀行資產品質評估
-#分析統計表" sheet as 逾期放款總額 (NPL_VALUE_HEADER) - confirmed against a
-# real download: these are bank-WIDE ratios (all loans, not credit-card
-# specific), so they belong with fetch_overdue_loans(), not the credit-card
-# sheet. An earlier version of this module wrongly sourced two
-# similarly-named columns from the CREDIT-CARD sheet instead (逾期三個月以上
-# 帳款比率/備抵呆帳提足率) - a real, but different, credit-card-only metric
-# that doesn't match this sheet's bank-wide 中國信託 values (0.13%/950.93%
-# for 114年12月 vs the credit-card sheet's 0.12%/299.62%) - fixed per
-# user-supplied ground truth from the actual government page.
-# Both already stored as percent-scale numbers in the sheet - never
-# divide/multiply these again, just append '%' on display (see format_pct
-# in statements.py/decks.py).
+# These live on the 資產品質 sheet, NOT the credit-card one: they are
+# bank-WIDE ratios. The credit-card sheet carries two similarly-named but
+# genuinely different metrics that do not match these values.
+# Both are ALREADY percent-scale here - never divide or multiply them again,
+# just append '%' on display.
+#   → docs/knowledge/regulator-datasets.md#逾放比率曾經取錯表
 NPL_RATIO_HEADER = "逾放比率(%)"
 NPL_COVERAGE_HEADER = "備抵呆帳/逾期放款(%)"
 
-# Repo root is THREE levels up from src/<package>/, not two. This module
-# moved down a directory; the same expression silently pointed at src/
-# instead. See core/industry.py, where exactly this bit once.
+# Repo root is THREE levels up from src/<package>/, NOT two - two levels
+# silently points at src/. This has bitten four modules in this repo.
 _CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "npl_cache"
 
 _USER_AGENT = "Mozilla/5.0 (compatible; disclosures/2.0)"
 
+# One regex per site: the two use DIFFERENT filename conventions, so a single
+# shared guess would be wrong for one of them.
+#   → docs/knowledge/regulator-datasets.md#頁面慣例2026-07-對真實下載確認
 _NPL_PERIOD_RE = re.compile(r"(\d{3})_(\d{1,2})(?:\(\d+\))?\.xlsx", re.IGNORECASE)
-# Matched against the RAW (still percent-encoded) href, since the YYYMM_
-# prefix sits before the encoded Chinese filename text.
+# Matched against the RAW (still percent-encoded) href - the YYYMM_ prefix
+# sits before the encoded Chinese filename text.
 _CC_PERIOD_RE = re.compile(r"/(\d{3})(\d{2})_[^/]*\.zip", re.IGNORECASE)
 
 
 def _fetch_url(url, timeout=60):
-    """GET `url` and return the raw response bytes. Uses the system's
-    default (verifying) SSL context - if this raises SSLCertVerificationError
-    in your environment, that means your machine's CA trust store is
-    missing an intermediate certificate (a local environment issue, common
-    on some Windows Python installs - reproduced in testing this module),
-    NOT that the connection should be downgraded to unverified. Fix it via
-    `pip install pip-system-certs` (uses the Windows store) or certifi -
-    don't disable verification, since that reopens this to a MITM attack.
-    Raises RuntimeError with that guidance (urlopen otherwise wraps SSL
-    errors inside urllib.error.URLError, not ssl.SSLError, so a caller
-    catching only ssl.SSLError would miss it - confirmed by testing)."""
+    """GET `url` and return the raw response bytes, using the system's default
+    VERIFYING SSL context.
+
+    **DO NOT disable SSL verification.** An SSLCertVerificationError here is a
+    local CA-trust-store problem (`pip install pip-system-certs` or certifi),
+    not a reason to downgrade the connection - that reopens a MITM attack.
+    This is AGENTS.md red line 1.
+      → docs/knowledge/regulator-datasets.md#為什麼不能停用-ssl-驗證
+
+    Caught as URLError, not ssl.SSLError - urlopen wraps SSL errors."""
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -161,19 +138,16 @@ def _list_period_links(page_url, period_re, ext):
 
 def resolve_period(links, roc_year=None, month=None):
     """Pick which published month to use. Returns (year, month, url, exact).
-    With no requested period, takes the newest available. With one, returns
-    it if published; otherwise falls back to the newest month at or BEFORE
-    the request (never a later one - a future month's figures are not a
-    substitute for the quarter you asked about) and reports exact=False so
-    the caller can say which period it actually used. These datasets lag by
-    a month or two, so asking for a just-ended quarter routinely lands
-    here rather than being an error.
 
-    One case can't honour "never later": a request OLDER than everything
-    published. There is nothing at or before it, so the oldest available month
-    is returned - which IS later than what was asked for. exact=False and the
-    caller's note both disclose it; the docstring used to flatly contradict
-    it."""
+    With a requested period that isn't published, falls back to the newest
+    month at or BEFORE it - never a later one, since a future month's figures
+    are not a substitute for the quarter asked about. These datasets lag by a
+    month or two, so this is routine, not an error.
+
+    ONE case can't honour "never later": a request OLDER than everything
+    published. The oldest available month is returned, which IS later.
+    exact=False and the caller's note both disclose it.
+      → docs/knowledge/regulator-datasets.md#要求的月份還沒公布時"""
     if roc_year is None or month is None:
         pick = max(links)
         return pick[0], pick[1], links[pick], True
@@ -187,9 +161,9 @@ def resolve_period(links, roc_year=None, month=None):
 
 def download_file(url, cache_dir=_CACHE_DIR):
     """Download `url` into `cache_dir` (named after the URL's own filename)
-    and return its local Path. Skips the download if already cached, so
-    repeat runs within a month don't re-fetch; delete the cached file to
-    force a refresh if the source re-uploads a revision under the same name."""
+    and return its local Path. Cached, so delete the file to force a refresh
+    when the source re-uploads a revision under the same name.
+      → docs/knowledge/regulator-datasets.md#快取"""
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
     dest = cache_dir / urllib.request.unquote(url.rsplit("/", 1)[-1])
@@ -213,24 +187,19 @@ def _xlsx_from_zip(zip_path):
 
 
 def _find_header_column(ws, header_text, max_scan_rows=10):
-    """1-indexed column of the cell (or short run of stacked cells) whose
-    text equals `header_text` once stripped of whitespace. Two passes:
-      1. A plain single cell, in any of the first `max_scan_rows` rows,
-         exactly equal to `header_text` - the common case (e.g. '銀行別',
-         '循環信用餘額').
-      2. If nothing matched, a 3-row-STACKED header: some real sheets split
-         one metric's name across 3 consecutive rows of the same column
-         (confirmed in a real download - the NPL sheet's '逾放'/'比率'/'(%)'
-         only read as '逾放比率(%)' once joined). The stacked header band
-         is located as the first row where at least 2 columns simultaneously
-         hold string text (distinguishing it from single-column title/date/
-         unit preamble lines above it, which only populate column 1) -
-         concatenating blindly from row 1 would otherwise pull those
-         preamble lines into column 1's own "header", never matching
-         anything. Only that 3-row band is concatenated per column, never
-         reaching down into the data rows below it.
-    Not a substring match in either pass, since one metric's name can be a
-    substring of another's."""
+    """1-indexed column of the cell (or short run of stacked cells) whose text
+    equals `header_text` once stripped of whitespace. Two passes: a plain
+    single cell, then a 3-row-STACKED header (some sheets split one metric's
+    name across three rows of the same column).
+
+    The stacked band starts at the first row where at least TWO columns hold
+    string text - that is what tells it apart from the single-column
+    title/date/unit preamble above, which blind concatenation would drag into
+    column 1's "header". Never reaches into the data rows below.
+
+    EXACT match in both passes, never a substring: one metric's name can be a
+    substring of another's.
+      → docs/knowledge/regulator-datasets.md#欄位靠標題文字定位"""
     target = "".join(header_text.split())
     rows = list(ws.iter_rows(min_row=1, max_row=max_scan_rows))
 
@@ -259,9 +228,9 @@ def _find_header_column(ws, header_text, max_scan_rows=10):
 
 
 def _parse_number(value):
-    """Both sheets are read with data_only=True, but the credit-card one
-    stores its figures as TEXT while the NPL one stores real numbers - so
-    accept either rather than assuming."""
+    """Accept both: the credit-card sheet stores its figures as TEXT while the
+    NPL one stores real numbers.
+      → docs/knowledge/regulator-datasets.md#數字有時是文字"""
     if value is None:
         return None
     if isinstance(value, (int, float)):
@@ -319,9 +288,8 @@ def _extract_columns_by_bank(xlsx_path, bank_header, value_headers, banks):
 def _result(kind, year, month, exact, url, unit, values, requested):
     note = ""
     if not exact and requested:
-        # Word the reason by direction. A request older than the whole dataset
-        # falls back FORWARD to the oldest month available, and calling that
-        # "isn't published yet" was simply wrong.
+        # Word the reason BY DIRECTION - a request older than the whole
+        # dataset falls FORWARD, and "isn't published yet" is wrong there.
         if (year, month) > tuple(requested):
             why = "that month is no longer in the published dataset"
         else:
@@ -394,7 +362,7 @@ def thousands_to_billions(value):
 
 
 def fetch_for_quarter(western_year, quarter, banks=TARGET_BANKS, cache_dir=_CACHE_DIR, verbose=False):
-    """Both datasets for one fiscal quarter, as decks.py's con-call
+    """Both datasets for one fiscal quarter, as earningsCalls.summary's
     fallback needs them. Returns {"credit_card": {...}, "overdue": {...}},
     each an individual fetch result dict, with credit_card carrying an
     extra "values_billions" already unit-converted for con-call use.

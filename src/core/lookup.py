@@ -17,32 +17,22 @@ from core.text import _strip_footnote_suffix
 
 def find_value_by_label(folder, label_aliases, period=1, verbose=False):
     """Search every .md file in `folder` for a table row whose label cell,
-    with any trailing footnote-reference suffix stripped, exactly equals
-    one of `label_aliases`. Checks TWO shapes per row: cells[1] (the usual
-    code+label+values shape most rows use - the label right after a
-    code cell, blank or otherwise) and, if that doesn't match, cells[0]
-    (a label+values shape with no code cell at all - confirmed in a real
-    114Q4 filing's standalone 活期性存款比率 disclosure table, which isn't
-    part of any coded statement and so was never given a leading code
-    column by the conversion). nth_value's own cells[1:] scan already
-    treats whichever cell holds the label as the thing to skip, so no
-    other change is needed to support the second shape - only the label
-    match itself needed to also look at cells[0].
-    Used as a fallback for the handful of subtotal/aggregate SUMMARY_LAYOUT
-    lines whose own code is unreliable across filings (see
-    SUMMARY_LABEL_FALLBACKS), and as the sole lookup for "label"-kind
-    SUMMARY_LAYOUT items that were never coded to begin with (e.g. 活存比).
-    Returns (label_in_doc, value, source_file) for the first match found,
-    or None. Requires an EXACT (stripped) match against the whole label
-    cell, not a substring - safe here because these are short, standalone
-    total-line labels (e.g. '淨收益'), not substrings of unrelated compound
-    line items."""
+    footnote suffix stripped, exactly equals one of `label_aliases`.
+
+    Match is EXACT against the whole cell, never a substring - safe only
+    because these are short standalone total-line labels ('淨收益'), not
+    substrings of compound line items.
+      → docs/knowledge/account-codes.md#一標籤比對summary_label_fallbacks
+
+    Checks TWO row shapes: cells[1] (the usual code+label+values) and, failing
+    that, cells[0] (label+values with no code cell at all - the 活期性存款比率
+    disclosure table isn't part of any coded statement).
+
+    Returns (label_in_doc, value, source_file) for the first match, or None."""
     for doc_path in sorted(Path(folder).rglob("*.md")):
-        # build_raw_lines (not a raw read+splitlines) so this benefits from
-        # despacing AND the dual-column-table split the same way every
-        # other consumer does - a blank/omitted code cell paired with a
-        # label living in a table's right-hand section (see
-        # _split_dual_column_tables) would otherwise never be found here.
+        # build_raw_lines, NOT a raw read - this needs the despacing and the
+        # dual-column split every other consumer gets, or a label living in a
+        # table's right-hand section is never found here.
         doc_lines = build_raw_lines(doc_path)
         strides = percent_stride_map(doc_lines)
         for line_idx, (_pn, line_s) in enumerate(doc_lines):
@@ -68,13 +58,12 @@ def find_value_by_label(folder, label_aliases, period=1, verbose=False):
 def find_code_value(folder, code, period=1, verbose=False, label_fallback=None):
     """Search every .md file in `folder` (no statement-section restriction)
     for a row whose leading cell equals `code` exactly. Returns
-    (label_in_doc, value, source_file) for the first match found, or None
-    if the code doesn't appear anywhere (with a value) and no
-    label_fallback matches either (see find_value_by_label). A code match
-    whose row has no parseable value (e.g. a bare section-header row like
-    "58400 | 營業費用 |  |  |") is skipped rather than treated as the
-    final answer, so a real value elsewhere (another matching row, or the
-    label fallback) still gets a chance."""
+    (label_in_doc, value, source_file) for the first match, or None.
+
+    A code match whose row has NO parseable value (a bare section-header row
+    like "58400 | 營業費用 |  |  |") is SKIPPED, never treated as the final
+    answer - a real value elsewhere, or the label fallback, still gets a
+    chance. → docs/knowledge/account-codes.md#代碼查不到時的三層退路"""
     for doc_path in sorted(Path(folder).rglob("*.md")):
         lines = build_raw_lines(doc_path)
         entries = group_rows_by_code(lines, {code})
@@ -95,22 +84,17 @@ def find_code_value(folder, code, period=1, verbose=False, label_fallback=None):
 
 
 def build_code_index(folder, codes, label_fallbacks=None, period=1, verbose=False):
-    """One-pass replacement for calling find_code_value() separately for
-    every code in `codes`: scans every .md file in `folder` ONCE - not once
-    per code - resolving each code as it's found and shrinking the set of
-    still-needed codes, so a later file is only scanned for whatever's
-    still missing rather than re-parsed from scratch per code. Safe to
-    consolidate this way because exact-code matching is unambiguous (a code
-    is a unique key, not a fuzzy text match like decks.py's term
-    matching - which genuinely needs to compare candidates across the whole
-    folder before choosing the best one, and is deliberately NOT
-    consolidated the same way). Output is identical to calling
-    find_code_value(folder, code, period, label_fallback=...) once per
-    code - same first-file-with-a-value wins, same label-fallback behavior
-    - just without the codes-times-files redundant file re-reads/re-parses.
-    label_fallbacks: optional {code: [alias, ...]} for codes that should
-    fall back to a label-text match (see find_value_by_label) if no code
-    match with a value turns up in any file.
+    """One-pass replacement for calling find_code_value() per code: scans
+    every .md file ONCE, shrinking the still-needed set as codes resolve.
+
+    Safe to consolidate ONLY because exact-code matching is unambiguous - a
+    code is a unique key. earningsCalls' term matching genuinely has to
+    compare candidates across the whole folder before choosing, and is
+    deliberately NOT consolidated the same way.
+
+    Output is identical to per-code find_code_value: same first-file-with-a-
+    value wins, same label-fallback behaviour.
+    label_fallbacks: optional {code: [alias, ...]}.
     Returns {code: (label, value, source_file) or None}."""
     label_fallbacks = label_fallbacks or {}
     remaining = set(codes)
@@ -161,12 +145,10 @@ def build_code_index(folder, codes, label_fallbacks=None, period=1, verbose=Fals
                 continue
             value = nth_value(cells, period, strides[line_idx])
             if value is None:
-                # Same rule the code pass above already follows: a matched row
-                # with no value for this period resolves nothing. Recording it
-                # would hand callers a None where they expect a number (CIR's
-                # abs(), a composite term's sum()) AND stop any later file
-                # from supplying the real figure - contradicting this
-                # function's own "first file WITH A VALUE wins" contract.
+                # Same rule as the code pass: a matched row with no value for
+                # this period resolves NOTHING. Recording it hands callers a
+                # None where they expect a number and blocks a later file from
+                # supplying the real figure.
                 continue
             for code in alias_to_codes[label]:
                 if code in remaining:

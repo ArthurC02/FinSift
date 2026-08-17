@@ -25,13 +25,9 @@ from core.industry import detect_industry_category
 # Keyed by the SUMMARY_LAYOUT/override code slot (what actually reaches
 # find_code_value), NOT by whichever literal code a given filing uses. Match is
 # whole-cell exact, never substring.
-# 為什麼代碼對小計列不可靠 → docs/knowledge/financialReports.md#一標籤比對summary_label_fallbacks
+# 為什麼代碼對小計列不可靠 → docs/knowledge/account-codes.md#一標籤比對summary_label_fallbacks
 SUMMARY_LABEL_FALLBACKS = {
     "10000": ["資產總計", "資產合計"],
-    # 淨收益合計 confirmed in a real 第一銀行 114Q4 individual filing - same
-    # line, same position in the net-income walk, just worded with the
-    # 合計 suffix. Exact whole-cell matching (see find_value_by_label) keeps
-    # this from colliding with anything.
     "4xxxx": ["淨收益", "淨收益合計"],
     "49010": ["利息淨收益合計", "利息淨收益"],
     "58400": ["營業費用合計"],
@@ -39,11 +35,7 @@ SUMMARY_LABEL_FALLBACKS = {
     "64000": ["本期稅後淨利", "本期淨利", "本年度淨利"],
     "63000": ["本期稅後淨利", "本期淨利", "本年度淨利"],
     "30000": ["權益總計", "權益合計"],
-    # 20000 = 負債合計/負債總計 (total liabilities) - not read anywhere
-    # currently (was only for the 資產=負債+權益 invariant-check row, since
-    # removed from the summary output); kept here, unused, in case that
-    # check is wanted again later.
-    "20000": ["負債合計", "負債總計"],
+    "20000": ["負債合計", "負債總計"],   # unused; kept for the 資產=負債+權益 check
 }
 
 
@@ -52,7 +44,7 @@ SUMMARY_LABEL_FALLBACKS = {
 # verified both ways before being added. The derived row MUST say so in its
 # note: a figure the filing never states must not look like one it does.
 # ponytail: a filing with a FOURTH opex component would silently understate.
-# 驗證方式與實測數字 → docs/knowledge/financialReports.md#二由組成項重建summary_code_derivations
+# 驗證方式與實測數字 → docs/knowledge/account-codes.md#二由組成項重建summary_code_derivations
 SUMMARY_CODE_DERIVATIONS = {
     "58400": ["58500", "59000", "59500"],
 }
@@ -60,19 +52,18 @@ SUMMARY_CODE_DERIVATIONS = {
 
 
 # ---------------------------------------------------------------------------
-# Per-entity profiles. Fields: industries, aliases, primary_entities,
-# code_overrides, code_overrides_finsum, composites. Every older table
-# (BANKS, BANK_NAME_ALIASES, the two override tables, COMPOSITE_TERMS,
-# earningsCalls' PRIMARY_BANK_ENTITIES) is now derived from this one, and
-# _validate_profiles makes an incomplete entity an import-time error.
+# Per-entity profiles. Every older table (BANKS, BANK_NAME_ALIASES, the two
+# override tables, COMPOSITE_TERMS, earningsCalls' PRIMARY_BANK_ENTITIES) is
+# derived from this one; _validate_profiles makes an incomplete entity an
+# import-time error.
 #
-# 不要從別家複製 composites - 組成代碼真的每家不同（兆豐/第一用 43100 而非
-# 49310，第一另用 43600/45000，華南用 47003）。抄來的是看起來正常的錯數字。
+# 不要從別家複製 composites - 組成代碼真的每家不同。抄來的是看起來正常的錯數字。
 # 別名不能是日常用語（「第一」會命中每份財報裡的「第一季」，使 detect_bank
 # 對所有資料夾都變成歧義而整批靜默跳過）。
 #
-# 每個欄位怎麼填、各自為什麼存在（含三起實際事故）
-#   → docs/knowledge/financialReports.md#profile-的六個欄位
+# 六個欄位各自怎麼填、每機構的組成代碼對照表
+#   → docs/knowledge/entity-resolution.md#profile-的六個欄位
+#   → docs/knowledge/account-codes.md#每機構的-composite-組成
 # ---------------------------------------------------------------------------
 
 BANK_PROFILES = {
@@ -100,10 +91,7 @@ BANK_PROFILES = {
     },
     "北富銀": {
         "industries": ["金融業", "金控業"],
-        # "富邦" alone is included so a deck/filing that only ever names the
-        # FHC parent ("富邦金控", as the 4Q25 analyst-meeting cover page does)
-        # still resolves to this entity; no other profile contains "富邦", so
-        # it stays unambiguous.
+        # 單獨的 "富邦" 是逐案確認過不與其他 profile 相撞才加的，不是通則。
         "aliases": ["北富銀", "台北富邦銀行", "臺北富邦銀行", "台北富邦", "臺北富邦", "富邦"],
         "primary_entities": ["台北富邦", "臺北富邦", "Taipei Fubon"],
         "code_overrides": {},
@@ -124,16 +112,8 @@ BANK_PROFILES = {
             "其他非利息收益": ["49700", "49750", "49899"],
         },
     },
-    # The six below were added from real 114Q4 individual filings. Their
-    # composites are read off each filing's own 個體綜合損益表 rather than
-    # copied from a sibling - the component codes genuinely differ (兆豐 and
-    # 第一 print 43100 where everyone else prints 49310; 第一 alone uses 43600
-    # and 45000; 華南 uses 47003 for the equity-method line; 新光 has no
-    # 除列按攤銷後成本 line at all).
-    # primary_entities here are NOT verified against a real earnings-call
-    # deck - no deck for these six has been through this tool yet. They only
-    # affect con-call extraction; check them against a real deck before
-    # trusting con-call output for these entities.
+    # 以下六家的 primary_entities 沒有對過任何一份真實法說會簡報。它們只影響
+    # 法說會擷取 - 信任這六家的法說會輸出前，先拿真實簡報驗一次。
     "兆豐": {
         "industries": ["金融業", "金控業"],
         "aliases": ["兆豐"],
@@ -163,7 +143,7 @@ BANK_PROFILES = {
         "code_overrides": {},
         "code_overrides_finsum": {},
         "composites": {
-            # No 除列按攤銷後成本衡量之金融資產損益 line in this filing at all.
+            # 這份財報整份沒有「除列按攤銷後成本」這一列。
             "評價及已實現": ["49200", "49310", "49600"],
             "其他非利息收益": ["49700", "49815", "49899"],
         },
@@ -179,10 +159,7 @@ BANK_PROFILES = {
             "其他非利息收益": ["49700", "49750", "49800"],
         },
     },
-    # "第一" alone would be a substring of ordinary text (第一階段, 第一季) in
-    # every other bank's filing, making this entity a candidate everywhere and
-    # turning detect_bank ambiguous for all of them - hence only the longer
-    # forms.
+    # 只收長名。單獨的「第一」是每份財報都有的日常用語（第一季、第一階段）。
     "第一": {
         "industries": ["金融業", "金控業"],
         "aliases": ["第一商業銀行", "第一銀行", "第一金"],
@@ -247,9 +224,10 @@ COMPOSITE_TERMS = _invert_composites(BANK_PROFILES)
 
 
 def resolve_bank_name(name):
-    """Normalize a --bank value to its canonical BANKS entry, accepting
-    either the short form or any alias in BANK_NAME_ALIASES. Raises
-    ValueError with the accepted names if nothing matches."""
+    """Normalize a --bank value to its canonical BANKS entry, accepting either
+    the short form or any alias in BANK_NAME_ALIASES. Raises ValueError with
+    the accepted names if nothing matches.
+      → docs/knowledge/entity-resolution.md#aliases"""
     for canonical, aliases in BANK_NAME_ALIASES.items():
         if name == canonical or name in aliases:
             return canonical
@@ -266,17 +244,16 @@ def bank_candidates(folder, industry=None):
 
     Restricted to entities whose `industries` include the filing's own, so a
     group's insurer can't be resolved as its sibling bank purely because the
-    short alias is a substring of both. `industry` may be passed by a caller
+    short alias is a substring of both.
+      → docs/knowledge/entity-resolution.md#industries
+    `industry` may be passed by a caller
     that already resolved it; None means detect it. When the industry can't
-    be established at all, every entity stays a candidate - an earnings-call
-    deck carries no registered name and so never resolves an industry, and
-    narrowing there would break con-call detection outright.
+    be established at all, EVERY entity stays a candidate - a deck carries no
+    registered name, and narrowing there breaks con-call detection outright.
 
-    Reads the same first-5 window detect_industry_category does. Reading only
-    paths[0] meant a filing whose cover page didn't carry the bank's name -
-    the exact case detect_industry_category was widened to 5 files for -
-    detected its industry fine but failed on the bank, and cli then
-    skipped the whole folder."""
+    Reads the same first-5 window detect_industry_category does; the cover
+    page does not always carry the bank's name.
+      → docs/knowledge/industry-and-layout.md#產業怎麼判定"""
     paths = sorted(Path(folder).rglob("*.md"))[:5]
     if not paths:
         return []
@@ -295,23 +272,13 @@ def detect_bank(folder):
     established - either because nothing matched, or because MORE THAN ONE
     bank did.
 
-    This used to return the first match in BANK_NAME_ALIASES order, which is
-    only safe while no filing can name two of them. That assumption does not
-    survive the full set of Taiwanese banks: the aliases are short forms
-    (they have to be - an earnings-call deck's cover says '玉山金控', never
-    the legal name, so detect_industry_category's full-legal-name approach
-    can't be borrowed here), many are substrings of each other, and a filing
-    naming a peer in a related-party or interbank note is ordinary rather
-    than exceptional. Under those conditions first-match-wins doesn't
-    degrade to N/A - it silently picks the wrong bank, applies that bank's
-    COMPOSITE_TERMS and SUMMARY_CODE_OVERRIDES, and produces a full set of
-    plausible-looking wrong numbers.
-
-    Ambiguity is therefore refused rather than guessed. Callers already have
-    a path for "couldn't detect" (statements asks for --bank, cli skips
-    the folder and says so), so this needs no new control flow - only a
-    message that distinguishes the two cases, which is what bank_candidates
-    is exposed for."""
+    **Ambiguity is refused, never resolved by order.** Do not restore a
+    first-match-wins rule: the aliases are short forms that are substrings of
+    each other, and a filing naming a peer in a related-party note is
+    ordinary - so picking the first would silently apply the WRONG bank's
+    COMPOSITE_TERMS and SUMMARY_CODE_OVERRIDES and emit a full set of
+    plausible wrong numbers.
+      → docs/knowledge/entity-resolution.md#為什麼歧義要拒絕而不是取第一個"""
     matched = bank_candidates(folder)
     return matched[0] if len(matched) == 1 else None
 
@@ -319,19 +286,16 @@ def detect_bank(folder):
 
 
 def bank_detection_message(folder):
-    """The --bank guidance to show when detect_bank returned None. The two
-    reasons need different actions from whoever reads it: nothing matched
-    means this entity may not be supported at all, while several matched
-    means it IS supported and only needs disambiguating - so they must not
-    collapse into one message."""
+    """The --bank guidance to show when detect_bank returned None.
+
+    THREE cases, deliberately not collapsed: nothing matched, several matched
+    (fixable with --bank), and an industry no profile covers at all (--bank
+    cannot help - every accepted value is refused again by the layout guard,
+    so "couldn't auto-detect" would send the reader down a dead end)."""
     found = bank_candidates(folder)
     if found:
         return ("Several banks are named in this filing's first pages (" + ", ".join(found)
                 + ") - pass --bank explicitly to say which one is the reporting entity")
-    # A filing whose industry IS resolvable but which no profile covers is a
-    # third case: --bank can't help, because every accepted value would then
-    # be refused again by the layout guard. Saying "couldn't auto-detect"
-    # here sends the reader down a dead end.
     industry = detect_industry_category(folder)
     supported = {i for p in BANK_PROFILES.values() for i in p["industries"]}
     if industry and industry not in supported:

@@ -33,26 +33,16 @@ _CODE_HEADER_RE = re.compile(r"代碼$")
 
 
 def _split_dual_column_tables(lines):
-    """Detect a table whose header row has a REPEATED code-column marker
-    (a cell ending in '代碼') and split its data rows into two independent
-    contiguous blocks - a real, common balance-sheet layout confirmed in
-    real 中信/玉山 individual filings: assets (its own code+label+value
-    columns) and liabilities+equity (a SECOND, separate code+label+value
-    column group) packed side by side into ONE physical table row, e.g.
-    CTBC's '| 資產代碼 | 資產 | ... | 負債及權益代碼 | 負債及權益 | ... |' or
-    玉山's plain '代碼' repeated verbatim for both sides. Every downstream
-    matcher (group_rows_by_code, find_value_by_label) only ever looks at a
-    row's first two cells for its code/label, so the second (right-hand)
-    section was previously completely invisible to them - a code or label
-    living there could never be found, no matter what it was. Splitting
-    into two SEPARATE contiguous blocks (all left-half rows, then all
-    right-half rows), rather than interleaving them, keeps continuation-
-    folding correct within each side (a footnote-wrapped label on one side
-    never gets folded across into the other side's still-open entry).
-    Tables with only one code-column header (i.e. every other table this
-    project has ever seen) pass through byte-identical - detection
-    requires the marker to appear MORE THAN ONCE in the same header row, so
-    there's no false-positive risk for the normal single-column-group case.
+    """Split a dual-column-group balance sheet (assets and liabilities+equity
+    packed side by side into ONE physical row) into two independent blocks.
+    Detected by a REPEATED code-column marker (a cell ending in '代碼') in the
+    header; a single marker passes through byte-identical.
+
+    Two SEPARATE contiguous blocks (all left-half rows, then all right-half),
+    never interleaved - interleaving folds one side's wrapped label into the
+    other side's still-open entry.
+      → docs/knowledge/reading-tables.md#左右雙欄的資產負債表
+
     `lines`: build_raw_lines()-shaped [(page_num, line), ...]. Returns the
     same shape, with only the affected tables' data-row spans replaced."""
     tables = parse_pipe_tables(lines)
@@ -108,16 +98,13 @@ def restrict_section(lines, start_markers, end_markers):
 
 
 def _is_table_divider(line):
-    """True only for a markdown TABLE divider ('|---|---:|'), not for a
+    """True only for a markdown TABLE divider ('|---|---:|'), never for a
     standalone horizontal rule ('---'), which is a section separator.
-    Requiring a pipe is what tells them apart - and it matters: a bare
-    '---' immediately after a table's last row made parse_pipe_tables'
-    "a pipe row whose NEXT line is a divider must be the next table's
-    header" guard fire, silently DROPPING that last row. Since decks list
-    periods oldest-first, the dropped row was the newest quarter, so the
-    whole table then resolved to the prior quarter (confirmed in a real
-    中信金 2Q25 deck: 整體利差 returned 1Q25's 1.87% because the 2Q25 row
-    sitting above a '---' separator was never parsed)."""
+
+    KEEP the pipe requirement: without it a bare '---' after a table's last
+    row trips parse_pipe_tables' next-table-header guard and silently DROPS
+    that row - and since decks list periods oldest-first, the dropped row is
+    the newest quarter. → docs/knowledge/reading-tables.md#分隔列與水平線的差別"""
     if "|" not in line:
         return False
     cells = [c.strip() for c in line.strip().strip("|").split("|")]
@@ -136,33 +123,15 @@ def _split_row(line):
 # ---------------------------------------------------------------------------
 # Row grouping and value parsing.
 #
-# These converted statements can't be parsed via a conventional
-# header-row + divider table structure: divider rows ("|---|...") are
-# frequently misplaced (they show up after the FIRST data row rather than
-# after a real header), so a header/divider-based table parser would
-# misclassify that first data row as a header and silently drop it. There's
-# also no usable dated header at all - periods appear only as prose above
-# the table or in an unrelated mini-table, never as parseable column
-# headers on the actual data rows.
+# Converted STATEMENTS cannot go through a header-row + divider table parser
+# (misplaced dividers, no dated header anywhere). Account rows are
+# reconstructed directly instead: a new entry starts on any pipe-line whose
+# first cell is a known code, and following pipe-lines fold into it until the
+# next code-shaped line.
 #
-# What IS consistent across balance sheet / income statement / cash flow
-# pages in this filer's format:
-#   - Every real data row's line begins with an account code cell that
-#     matches the coding dictionary exactly.
-#   - A long account name sometimes wraps onto one or more following
-#     physical lines (still pipe-delimited, but with a blank/empty code
-#     cell) before the value cells appear.
-#   - Numeric period columns are always listed most-recent-period-first,
-#     left to right, each formatted with comma-grouping (e.g.
-#     "14,450,034,484"); percentage columns alongside them never have a
-#     comma (values stay under 1000).
-#
-# So rather than parsing "tables", account rows are reconstructed directly:
-# a new entry starts on any pipe-line whose first cell is a known code, and
-# any following pipe-lines are folded into that same entry until the next
-# known-code line appears. The target period's value is then just the Nth
-# comma-grouped number found across the entry's cells (N=1 for the most
-# recent period, the default).
+# Decks are the opposite - their column headers ARE inside the table, so they
+# go through parse_pipe_tables.
+#   → docs/knowledge/reading-tables.md#為什麼財報不能用標準表格解析
 # ---------------------------------------------------------------------------
 
 _CODE_SHAPE_RE = re.compile(r"^[A-Za-z0-9]{3,8}$")
@@ -183,22 +152,16 @@ _PERCENT_HEADER_RE = re.compile(r"^[%％]$|[%％]\s*$")
 def percent_stride_map(lines):
     """Map each line index to the value-column STRIDE of its enclosing table.
 
-    These filings alternate value, percent, value, percent - so reading every
-    OTHER numeric cell finds the periods. But a table with no share column at
-    all lists its periods consecutively, and striding past every second one
-    made period 2 permanently unreachable there (the ROA/ROE cross-check
-    silently disappeared as a result).
-
-    The row itself cannot tell the two apart: the '%' appears only in the
-    table's HEADER, never in a data cell, so
-    ['10000', '資產總計', '6,120,884', '100.0'] and
-    ['10000', '資產總計', '6,120,884', '5,900,000'] are the same shape. The
-    header is the only available signal, hence this map.
+    The ROW cannot tell stride 1 from stride 2: the '%' appears only in the
+    table's HEADER, never in a data cell, so these are the same shape -
+        ['10000', '資產總計', '6,120,884', '100.0']
+        ['10000', '資產總計', '6,120,884', '5,900,000']
+    The header is the only signal there is, hence this map.
+      → docs/knowledge/reading-tables.md#值與百分比交錯stride
 
     A pipe row immediately followed by a divider row is a table header (the
-    same rule parse_pipe_tables uses). Lines before any header - and any line
-    whose enclosing table couldn't be identified - keep stride 2, so anything
-    this can't read behaves exactly as it did before.
+    rule parse_pipe_tables uses). Anything unidentifiable keeps stride 2, the
+    historical behaviour.
     """
     strides, stride = [], 2
     for i, (_page_num, line) in enumerate(lines):
@@ -219,22 +182,15 @@ def group_rows_by_code(lines, code_dict):
         from (see percent_stride_map - pass it to nth_value so a table with
         no share column reads its periods consecutively instead of skipping
         every second one).
-    Pinned by test_l1_tables.py: this used to be documented as a 3-tuple with
-    the stride mentioned only in a trailing clause, which is how a shape claim
-    goes stale without anything going red.
+    Pinned by test_l1_tables.py (a 4-tuple, not 3 - the shape claim went stale
+    once already without anything going red).
 
-    A continuation line is one whose leading cell is either blank or isn't
-    code-shaped (see _looks_like_code - covers a wrapped account name's
-    footnote-only second physical line, e.g. '（附註...）', confirmed
-    against a real filing). A leading cell that DOES look like a code ends
-    the current entry, whether or not that code is itself in `code_dict`.
-    This distinction matters because find_code_value() calls this with a
-    code_dict containing just ONE code: under the old rule ("continue
-    unless the next line's code IS one we're tracking"), every subsequent
-    row in the table - each with its own perfectly normal, differently-
-    coded leading cell - was misread as a "continuation" of the target row
-    and folded in, contaminating nth_value()'s scan with numbers from
-    unrelated later rows."""
+    A continuation line has a leading cell that is blank or NOT code-shaped. A
+    cell that DOES look like a code ends the current entry, whether or not it
+    is in `code_dict` - find_code_value passes a dict of ONE code, so a
+    tracking-based rule folds every unrelated later row into the target and
+    contaminates nth_value's scan.
+      → docs/knowledge/reading-tables.md#續行的判準"""
     lines = list(lines)
     strides = percent_stride_map(lines)
     entries = []
@@ -267,13 +223,11 @@ def group_rows_by_code(lines, code_dict):
 
 def parse_pipe_tables(lines):
     """Standard markdown table parser: a header line immediately followed by
-    a divider line, then consecutive pipe-delimited data rows. Used for
-    layout 2 (row=metric/column=period), which assumes - per confirmation
-    from the user about their conversion tool - that column headers are
-    captured inside the table itself, unlike the messier prose-header
-    layout 1 data already handled elsewhere in this file. Returns a list of
-    {"header": [...], "rows": [[...]], "line_idx": int} (line_idx = index
-    into `lines` of the header row, used to locate a preceding heading)."""
+    a divider line, then consecutive pipe-delimited data rows. For the
+    layouts whose column headers really are inside the table (decks, and the
+    transposed profitability tables) - not the prose-header statement layout
+    handled above. Returns {"header", "rows", "line_idx"} per table
+    (line_idx = the header row's index, used to locate a preceding heading)."""
     tables = []
     i, n = 0, len(lines)
     while i < n:
@@ -283,13 +237,11 @@ def parse_pipe_tables(lines):
             rows = []
             j = i + 2
             while j < n and "|" in lines[j][1] and not _is_table_divider(lines[j][1]):
-                # A pipe line whose NEXT line is a divider is the header of
-                # the FOLLOWING table, not a data row of this one. build_raw_lines
-                # drops blank lines, so two tables separated only by a blank line
-                # would otherwise merge - swallowing the second table's header as
-                # a data row here and leaving its divider to break the outer scan,
-                # losing that table entirely. That silently hid the quarterly NIM
-                # table sitting under the annual one in a real 國泰 deck.
+                # A pipe line whose NEXT line is a divider is the FOLLOWING
+                # table's header, not a data row of this one - build_raw_lines
+                # drops blank lines, so two tables separated only by a blank
+                # line would otherwise merge and the second one vanish.
+                #   → docs/knowledge/reading-tables.md#兩張表擠在一起
                 if j + 1 < n and _is_table_divider(lines[j + 1][1]):
                     break
                 rows.append(_split_row(lines[j][1]))

@@ -23,56 +23,33 @@ from earningsCalls.terms import TermSpec, load_terms
 
 
 
-# Repo root is THREE levels up from src/<package>/, not two. This module
-# moved down a directory; the same expression silently pointed at src/
-# instead. See core/industry.py, where exactly this bit once.
+# Repo root is THREE levels up from src/<package>/, NOT two - two levels
+# silently points at src/. This has bitten four modules in this repo.
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 
 
 # ---------------------------------------------------------------------------
-# Curated summary: a fixed, business-relevant subset of the 32-term
-# dictionary, rather than every term (several of which - 總資產, 淨收益,
-# 稅前/稅後淨利, ROA/ROE, etc. - overlap conceptually with statements.py's
-# financial-report extraction and aren't wanted in con-call output). This is
-# the default mode when no term is given, matching statements.py's
-# curated `summary` design: both ratio-type and balance-type terms get only
-# the latest-quarter, as-reported value. An earlier version of this code
-# additionally scaled ratio terms by x4/quarter_num to produce an
-# "annualized" figure, on the assumption that a con-call table's ratios are
-# cumulative year-to-date flows the same way financial-statement income
-# figures are. Verification against real decks (中信金 2Q25/1Q26, 國泰金
-# 2Q25) disproved that assumption for every ratio term here: NIM, 存放比,
-# 放款均率, 存款均率, and the computed CIR are all already-annualized
-# rates/point-in-time ratios (confirmed by comparing the same deck's 1Q/1H/
-# 9M/FY columns, which stay in the same magnitude rather than scaling with
-# period length) - so x4/quarter_num scaling produced impossible values
-# (e.g. a >100% loan-to-deposit ratio, a >100% cost-income ratio) that don't
-# correspond to anything in the source. Removed; only the as-reported value
-# is shown, same as balance-type terms.
+# Curated summary: a fixed, business-relevant subset of the term dictionary.
 #
-# Each term is looked up ONCE per folder (first match found, scanning files
-# in sorted order) rather than accumulating every occurrence across every
-# file, so the summary doesn't repeat the same term for every page it
-# happens to appear on.
+# Ratio terms are shown AS REPORTED, never scaled by x4/quarter_num. They are
+# already-annualised rates or point-in-time ratios - scaling them produced
+# impossible values (>100% loan-to-deposit, >100% cost-income).
+#   → docs/knowledge/ratios.md#法說會的比率為什麼不年化
+#
+# Each term is looked up ONCE per folder (best match, not every occurrence).
 # ---------------------------------------------------------------------------
 
 RATIO_TERMS = ["NIM", "放款均率", "存款均率", "存放利差"]
 
 
-# CIR moved to the fin_report summary (statements.SUMMARY_LAYOUT), computed
-# directly as abs(營業費用)/淨收益 from the SAME filing, no crosscheck - the
-# con-call deck's own 營業費用/營業收入 table turned out to be a different
-# scope (bank-level operating figures at deck-reported scale, e.g. 中信's
-# own page showed 4Q25 revenue/opex an order of magnitude different from
-# the individual-basis fin_report figures) that doesn't reconcile with
-# fin_report's individual-entity CIR, so a con-call-only CIR here was
-# comparing two genuinely different quantities under the same name.
-# 其他放款 was dropped as an OUTPUT row: under LOAN_RECOMPOSITION below its
-# value is always folded into 個人放款 (北富銀's 其他 column, 中信's
-# 信用貸款與其他), so keeping it as its own row would double-count. It stays
-# in HELPER_TERMS because 中信's 個人放款 formula still reads it as an input.
+# CIR is NOT here - it lives in the fin_report summary, computed from the same
+# filing. → docs/knowledge/ratios.md#cir-為什麼從法說會搬到財報
+#
+# 其他放款 is deliberately not an OUTPUT row: LOAN_RECOMPOSITION always folds
+# it into 個人放款, so its own row would double-count. It stays in
+# HELPER_TERMS because 中信's 個人放款 formula reads it as an input.
 BALANCE_TERMS = ["企業放款", "房貸", "個人放款", "信用卡循環",
                  "法說會放款餘額合計", "法說會外幣放款"]
 
@@ -84,13 +61,10 @@ HELPER_TERMS = ["其他放款", "政府放款", "信貸", "其他個人授信其
 
 
 
-# 逾放比率/備抵呆帳/逾期放款 - bank-WIDE ratios (all loans, not credit-card
-# specific - confirmed against a real download; an earlier version of this
-# wrongly sourced two similarly-named but different metrics off the
-# credit-card sheet instead), read from the SAME FSC "本國銀行資產品質評估
-# 分析統計表" sheet as 逾期放款總額, no con-call source at all. Already
-# percent-scale numbers there - see disclosures.NPL_RATIO_HEADER/
-# NPL_COVERAGE_HEADER - passed straight through as "ratio" kind rows.
+# bank-WIDE ratios off the FSC 資產品質 sheet - NOT the credit-card sheet,
+# which carries similarly-named but different metrics. Already percent-scale
+# there, so they pass straight through, never rescaled.
+#   → docs/knowledge/regulator-datasets.md#逾放比率曾經取錯表
 NPL_RATIO_TERM = "逾放比率"
 
 
@@ -98,18 +72,15 @@ NPL_COVERAGE_TERM = "備抵呆帳/逾期放款"
 
 
 
-# This project's short bank names -> the exact legal names the FSC regulator
-# spreadsheets use in their own bank-name column (see disclosures.TARGET_BANKS).
+# This project's short bank names -> the exact string the FSC's own
+# spreadsheet prints in its bank-name column.
 #
-# DELIBERATELY NOT extended to the six entities added to BANK_PROFILES from
-# their 114Q4 filings. The key here has to be the string the FSC's own
-# spreadsheet prints, which is not necessarily a filing's registered name and
-# cannot be established without reading a real regulator file - and this repo
-# must not reach banking.gov.tw to find out (see AGENTS.md). Guessing
-# "兆豐國際商業銀行" and being one character off looks exactly like a bank the
-# regulator didn't publish that month. So an unmapped entity is refused rather
-# than guessed, and now says so (see gov_name_note) instead of producing
-# unexplained N/A rows.
+# DO NOT add an entry by guessing it from a filing's registered name. Being
+# one character off looks exactly like a bank the regulator didn't publish
+# that month, and confirming it means reading a real regulator file - which
+# this repo must not fetch (AGENTS.md red line 2). Unmapped is REFUSED and
+# says so via gov_name_note.
+#   → docs/knowledge/entity-resolution.md#金管會名稱對照為什麼只有四家
 _GOV_BANK_NAMES = {
     "北富銀": "台北富邦商業銀行",
     "國泰": "國泰世華商業銀行",
@@ -122,10 +93,9 @@ _GOV_BANK_NAMES = {
 
 def gov_name_note(bank):
     """Why the regulator-sourced rows are N/A for `bank`, or "" if they
-    shouldn't be. Same reasoning as the fin_report side: an N/A row and a
-    correctly-extracted one are indistinguishable once exported, and "this
-    entity was never mapped to a regulator name" is a different problem from
-    "the regulator dataset was unreachable"."""
+    shouldn't be. "Never mapped to a regulator name" is a different problem
+    from "the dataset was unreachable", and they need different fixes.
+      → docs/knowledge/na-and-refusal.md#na-的六種成因"""
     if not bank:
         return "no entity resolved for this deck, so no regulator lookup was attempted"
     if bank not in _GOV_BANK_NAMES:
@@ -157,45 +127,19 @@ def _sub(a, b):
 # ---------------------------------------------------------------------------
 # Per-bank loan recomposition.
 #
-# Every deck breaks its loan book down differently, and none of them match
-# the shape this project wants (企業/房貸/個人/信用卡循環 as four disjoint
-# buckets that sum to the total). The raw matched values therefore need
-# per-bank arithmetic before they mean the same thing across banks:
+# No deck publishes the shape this project wants (企業/房貸/個人/信用卡循環 as
+# four disjoint buckets summing to the total), so raw matched values need
+# per-bank arithmetic before they mean the same thing across banks. Every
+# formula was reconciled against that deck's own stated total.
+#   → docs/knowledge/earnings-call-matching.md#放款重組每家的公式
 #
-#   北富銀: 個人放款 as printed BUNDLES 房貸 + 信貸 + 其他 + 信用卡循環, so
-#           房貸/信用卡循環 must be pulled back out, leaving 信貸 + 其他.
-#           企業授信 excludes 政府 lending, which belongs in the corporate
-#           bucket here. Verified: 1172.2 + 154.0 + 1209.0 + 11.5 = 2546.7,
-#           matching the deck's own 授信餘額合計 2546.6 (rounding).
-#   中信:   figures are group-wide and include 海外子行 (overseas
-#           subsidiaries), which this project scopes out; 企業放款 as printed
-#           is TWD-only so FX lending has to be added back. 信用貸款與其他
-#           still contains 信用卡循環, which the deck never breaks out (hence
-#           the regulator fallback below). Verified: 1699 + 1393 + 299.1 +
-#           17.9 = 3409.0 = the deck's 總放款 4246 - 海外子行 837.
-#   玉山:   房貸 as printed covers only 房屋貸款; 個人擔保貸款 (fully
-#           collateralised personal lending, per the deck's own footnote) is
-#           the same economic bucket here. 個人放款 as printed bundles all
-#           three personal categories, so the unsecured piece is 小額信貸
-#           alone. Total is the sum of the four recomposed buckets, which
-#           excludes 海外子行 - consistent with 中信's treatment.
-#   國泰:   left alone - its deck already publishes the four buckets disjoint
-#           and they sum exactly to its stated 放款總額 (942.6 + 1404.9 +
-#           477.7 + 22.2 = 2847.4). Only 信用卡循環 is filled from the
-#           regulator dataset, since the deck reports 信用卡放款 instead.
+# Each formula reads the RAW (pre-recomposition) values dict, so formulas
+# never see each other's output and may be written in any order.
 #
-# Each formula reads from the RAW (pre-recomposition) values dict, so
-# formulas never see each other's output and can be written in any order.
-#
-# Deliberately NOT folded into statements.BANK_PROFILES with the other
-# per-entity tables. Two reasons. It is logic, not data - lambdas nested in a
-# dict literal, the one construct static import checking can't see (which is
-# why tools/undefined.py walks dicts and why the L2 suite executes all nine),
-# so moving it carries risk the other tables don't. And it degrades safely on
-# its own: an entity with no entry here simply gets no recomposition, which is
-# the correct default (國泰 already has none), whereas a missing composites or
-# aliases entry produces a wrong or absent number. The profile completeness
-# check therefore has nothing to enforce about it.
+# Deliberately NOT folded into BANK_PROFILES: it is LOGIC, not data (lambdas
+# in a dict literal - the one construct static import checking can't see), and
+# it degrades safely, unlike a missing composites or aliases entry.
+#   → docs/knowledge/earnings-call-matching.md#為什麼不併進-bank_profiles
 # ---------------------------------------------------------------------------
 LOAN_RECOMPOSITION = {
     "北富銀": {
@@ -211,12 +155,9 @@ LOAN_RECOMPOSITION = {
                      "信用貸款與其他 − 信用卡循環"),
         "法說會放款餘額合計": (lambda v: _sub(v["法說會放款餘額合計"], v["海外子行"]),
                                 "總放款 − 海外子行"),
-        # Built additively from the deck's own 外幣放款成長率-依分子行
-        # breakdown rather than as (總外幣放款 − 海外子行): the subtractive
-        # form gave 670 vs this form's 682 for Q4 2025, because the
-        # breakdown's three rows don't sum exactly to the headline total.
-        # The additive form is the one that matches the intended scope
-        # (onshore + offshore branches, excluding overseas subsidiaries).
+        # ADDITIVE, not (總外幣放款 − 海外子行): the two disagree (682 vs 670
+        # for Q4 2025) because the breakdown's rows don't sum to the headline
+        # total, and only the additive form matches the intended scope.
         "法說會外幣放款": (lambda v: _add(v["海外分行"], v["OBU_DBU"]),
                             "海外分行 + OBU+DBU"),
     },
@@ -234,19 +175,11 @@ LOAN_RECOMPOSITION = {
 
 
 
-# The four recomposed buckets should sum to the recomposed total. Verified
-# against real Q4 2025 decks for all 4 banks: 中信 and 玉山 reconcile to the
-# cent, 北富銀 is off 0.1 and 國泰 0.03 purely from the decks' own one-decimal
-# rounding. Anything beyond this tolerance means a component matched the
-# wrong row or a formula's assumption stopped holding for a new filing -
-# surfaced as a note rather than silently accepted (same principle as
-# statements's 資產=負債+權益 check).
-# Sized for the decks' own rounding, not for arithmetic error: 中信's
-# standalone loan table prints whole 拾億元 integers, so 4 components plus a
-# total carry up to ~±2.5 of accumulated rounding - and that deck's OWN rows
-# already don't tie (its components sum to 4,044 against a printed 總放款 of
-# 4,043). A tolerance below this fires on the source's rounding rather than
-# on anything the extractor did.
+# Sized for the DECKS' OWN ROUNDING, not for arithmetic error: a deck printing
+# whole 拾億元 integers carries up to ~±2.5 of accumulated rounding across 4
+# components plus a total, and one deck's own rows already don't tie. Anything
+# tighter fires on the source's rounding rather than on the extractor.
+#   → docs/knowledge/earnings-call-matching.md#放款重組的容忍度是怎麼來的
 _LOAN_RECONCILE_TOLERANCE = 2.5
 
 
@@ -259,29 +192,25 @@ _CN_QUARTER_ORDINAL = {"一": 1, "二": 2, "三": 3, "四": 4,
                        "1": 1, "2": 2, "3": 3, "4": 4}
 
 
-# '第四季' / '第 4 季' - the ordinal may be a Chinese numeral or an Arabic
-# digit, with or without surrounding spaces (real decks use both: 國泰 and
-# 中信 write 第四季, 玉山 writes '第 4 季').
+# '第四季' / '第 4 季' - real decks use Chinese numerals AND Arabic digits,
+# with or without spaces.
 _QUARTER_TITLE_RE = re.compile(r"第\s*([一二三四1-4])\s*季")
 
 
-# '2025年全年法人說明會' - a full-year deck (confirmed in a real 富邦 deck)
-# is the Q4 deck; it reports the same period, just named differently.
+# A full-year deck IS the Q4 deck - same period, different name.
 _FULL_YEAR_TITLE_RE = re.compile(r"全年|FY\d{2,4}|Full[- ]?Year", re.IGNORECASE)
 
 
 
 
 def detect_con_call_quarter(folder):
-    """Derive the current quarter number (1-4) from the first .md file in
-    `folder` (sorted - typically the cover page). Con-call decks state the
-    quarter directly in the title (e.g. '2025年第四季法人說明會' = Q4 2025)
-    using the Western calendar year, not the ROC-calendar convention
-    statements.py's derive_quarter_num assumes for financial statements -
-    so this looks for that ordinal pattern instead of reusing it. A deck
-    titled '全年'/full-year is treated as Q4, since that is the period it
-    covers. Falls back to derive_quarter_num (ROC-date parsing) if no such
-    title is found, in case a deck instead states a plain ROC-style date."""
+    """Derive the current quarter (1-4) from the first .md file in `folder`.
+
+    Decks state the quarter in their title using the WESTERN calendar year,
+    not the ROC convention derive_quarter_num assumes for filings - hence a
+    separate pattern rather than reuse. Falls back to derive_quarter_num when
+    no such title is found.
+      → docs/knowledge/reading-tables.md#民國年西元年季度"""
     paths = sorted(Path(folder).rglob("*.md"))
     if not paths:
         return None
@@ -296,10 +225,8 @@ def detect_con_call_quarter(folder):
 
 
 
-# '2025年第四季法人說明會' - the Western calendar year in a deck's own title,
-# needed to pick the right month of the FSC regulator datasets (which are
-# indexed by ROC year). Bounded to 20xx so a stray 4-digit figure elsewhere
-# on the cover page can't be mistaken for it.
+# Bounded to 20xx so a stray 4-digit figure on the cover page can't be
+# mistaken for the deck's reporting year.
 _WESTERN_YEAR_RE = re.compile(r"(20\d{2})\s*年")
 
 
@@ -328,22 +255,15 @@ def collect_con_call_summary(folder, terms, verbose=False, bank=None):
         `value` key on a ratio row at all)
       - balance terms: {term, kind: "balance", value, period_label,
                         matched_label, source_file, is_percent, note}
-    `note` is on BOTH shapes (ratio rows carry it too) and reaches the
-    exported CSV, so it is part of this contract rather than an internal
-    detail. It carries the loan-reconciliation warning (see
-    _LOAN_RECONCILE_TOLERANCE) on the loan total, and on the
-    regulator-sourced rows (逾放比率, 備抵呆帳/逾期放款, and 信用卡循環 when
-    the deck itself disclosed nothing) the reason that lookup produced
-    nothing - see gov_name_note.
-    CIR is no longer produced here - see statements.SUMMARY_LAYOUT (moved to
-    the fin_report summary, computed directly from the same filing's
-    營業費用/淨收益 with no crosscheck against this deck's figures - see
-    RATIO_TERMS' comment for why). `bank` scopes matching to that bank's own
-    subsidiary table
-    (see PRIMARY_BANK_ENTITIES); auto-detected from the deck when omitted.
-    period_label and matched_label are carried through to the output so the
-    period a figure came from, and the row/column label it was read off, are
-    both checkable without re-running in verbose mode."""
+    `note` is on BOTH shapes and reaches the exported CSV, so it is part of
+    this contract, not an internal detail: it carries the loan-reconciliation
+    warning and, on the regulator-sourced rows, the reason that lookup
+    produced nothing (see gov_name_note).
+
+    CIR is NOT produced here - it lives in the fin_report summary.
+    `bank` scopes matching to that bank's own subsidiary table; auto-detected
+    from the deck when omitted. period_label and matched_label reach the
+    output so a figure stays checkable without re-running in verbose mode."""
     quarter_num = detect_con_call_quarter(folder)
     if bank is None:
         bank = detect_bank(folder)
@@ -372,10 +292,9 @@ def collect_con_call_summary(folder, terms, verbose=False, bank=None):
     for name in BALANCE_TERMS + HELPER_TERMS:
         found = find_term_value(folder, terms[name], verbose=verbose,
                                  primary_aliases=primary_aliases, require_absolute=True)
-        # Normalise to 十億元 before anything downstream touches the number:
-        # LOAN_RECOMPOSITION combines figures ACROSS tables, and decks do not
-        # use one unit throughout (see detect_unit_scale) - a 百萬元 loan
-        # table minus a 拾億元 subsidiary table is off by 1000x otherwise.
+        # Normalise to 十億元 BEFORE anything downstream touches the number -
+        # LOAN_RECOMPOSITION combines figures across tables, and decks mix
+        # units. → docs/knowledge/reading-tables.md#單位不是全篇一致
         scaled = None
         if found and found[1] is not None:
             scaled = found[1] * found[5]
@@ -390,15 +309,10 @@ def collect_con_call_summary(folder, terms, verbose=False, bank=None):
             "is_percent": found[4] if found else False,
         }
 
-    # 信用卡循環 fallback: several decks never publish it standalone (中信
-    # folds it into 信用貸款與其他; 國泰 reports only an aggregate 信用卡放款),
-    # yet 中信's 個人放款 formula subtracts it. The FSC regulator dataset
-    # publishes it for every bank monthly, so fill from there when - and only
-    # when - the deck itself didn't provide it, converting 千元 to the 十億元
-    # the loan tables use. 逾放比率/備抵呆帳/逾期放款 come from a DIFFERENT
-    # FSC sheet (fetch_overdue_loans - the bank-wide NPL disclosure, not the
-    # credit-card one) and have no con-call source at all. Both fetched once
-    # per run, whenever the bank is known (not only when 信用卡循環 is missing).
+    # 信用卡循環 is filled from the regulator dataset when - and ONLY when -
+    # the deck itself didn't provide it, converting 千元 to 十億元.
+    # 逾放比率/備抵呆帳 come from a DIFFERENT FSC sheet and have no deck source
+    # at all. → docs/knowledge/earnings-call-matching.md#信用卡循環的金管會退路
     cc = npl = None
     western_year = detect_con_call_year(folder)
     need_gov = raw["信用卡循環"]["value"] is None
@@ -437,10 +351,8 @@ def collect_con_call_summary(folder, terms, verbose=False, bank=None):
                       f"{raw['信用卡循環']['value']:.2f} 十億元 ({cc['period']})")
     if npl:
         legal = _GOV_BANK_NAMES.get(bank)
-        # Already percent-scale numbers in the source (see
-        # disclosures.NPL_RATIO_HEADER/NPL_COVERAGE_HEADER) - passed through
-        # as-is, never rescaled, so they display via format_pct exactly as
-        # the regulator published them.
+        # Already percent-scale in the source - passed through as-is, NEVER
+        # rescaled, so they display exactly as the regulator published them.
         if npl.get("npl_ratios", {}).get(legal) is not None:
             npl_ratio_value = npl["npl_ratios"][legal]
             npl_ratio_period = npl["period"]
@@ -531,9 +443,8 @@ def write_summary_csv(folder, rows):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    # --folder (not a positional) since `term` is also optional - two optional
-    # positionals in a row would be ambiguous (a single token would always be
-    # consumed by the first one, folder, rather than falling through to term).
+    # --folder is a flag, not a positional: `term` is also optional, and two
+    # optional positionals in a row are ambiguous.
     ap.add_argument("--folder", default=None,
                      help="Folder containing earnings-call .md files. If omitted, a "
                           "folder-picker dialog opens.")

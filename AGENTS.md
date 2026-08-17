@@ -85,10 +85,24 @@ python tools\ab.py <改動前的 src> > before.txt   # V4 A/B 位元組比對
 
 ## 知識文件
 
-長篇的來龍去脈（比對過哪幾份財報、踩過的坑、試過而放棄的作法）放在 `docs/knowledge/<套件>.md`。程式碼裡只留**規則本身**——門檻值旁的一行、「不要 X」的祈使句——再加一行 `→ docs/knowledge/...#章節`。
+長篇的來龍去脈（比對過哪幾份財報、踩過的坑、試過而放棄的作法）放在 `docs/knowledge/`。程式碼裡只留**規則本身**——門檻值旁的一行、「不要 X」的祈使句——再加一行 `→ docs/knowledge/...#章節`。
 
 判準：**這行註解消失後，會不會有人做出一個看起來完全合理的修改，而產生靜默的錯數字？**
 會 → 留在程式碼旁。不會 → 進知識文件。
+
+**依主題切，不依套件切。** 這個 repo 的檔案切法已經變過四次，綁在檔案上的文件會被切爛；主題不會。同一個主題常橫跨兩三個套件（機構解析同時住在 `entities`、`matching`、`profitability`）。
+
+| 想知道 | 讀 |
+|---|---|
+| 機構怎麼認、為什麼歧義要拒絕、金管會名稱對照 | [entity-resolution.md](docs/knowledge/entity-resolution.md) |
+| 科目代碼、每機構覆寫與 composite、查不到時的三層退路 | [account-codes.md](docs/knowledge/account-codes.md) |
+| 產業判定、layout 為什麼綁死產業、科目字典工作簿 | [industry-and-layout.md](docs/knowledge/industry-and-layout.md) |
+| 表格結構、期別標籤、單位、數字解析 | [reading-tables.md](docs/knowledge/reading-tables.md) |
+| N/A 的六種成因、「判不出來就拒絕」的實作 | [na-and-refusal.md](docs/knowledge/na-and-refusal.md) |
+| ROA/ROE 三個來源、年化、交叉核對、CIR | [ratios.md](docs/knowledge/ratios.md) |
+| 法說會詞彙比對、放款重組 | [earnings-call-matching.md](docs/knowledge/earnings-call-matching.md) |
+| 金管會資料集、SSL、欄位定位 | [regulator-datasets.md](docs/knowledge/regulator-datasets.md) |
+| 資料夾分類、合併輸出、Excel 慣例 | [cli-and-export.md](docs/knowledge/cli-and-export.md) |
 
 `tools/knowledge_links.py` 只保證被引用的章節**還存在**，不保證內容**還正確**。綠燈的意思是「地址還在」。
 

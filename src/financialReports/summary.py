@@ -24,37 +24,22 @@ from financialReports.ratios import collect_roa_roe
 
 
 # ---------------------------------------------------------------------------
-# Curated per-bank summary export ("summary" mode): a fixed set of specific
-# codes plus two composite/derived terms, with bank-specific variations.
+# The fixed sequence of lines "summary" mode always outputs.
 #
-# Unlike the whole-statement dumps above, these codes are matched directly
-# against a document's rows regardless of whether they're present in a
-# coding dictionary - most of them aren't. This is expected - the list spans
-# concepts that not every bank reports under the same code, which is also
-# why some entries need a bank-specific override (e.g. 國泰 uses 63000
-# instead of 64000) or an entirely different composite formula. No
-# statement-section restriction is applied, since a given code isn't
-# guaranteed to live in the same statement across all 4 banks - the whole
-# document is searched.
+# Codes are matched RAW against the document (no coding dictionary, no
+# statement-section restriction) - a code is not guaranteed to live in the
+# same statement across banks. A code (or a whole composite, if one component
+# is missing) that isn't found shows as N/A rather than the row being
+# omitted, so every expected line always appears.
 #
-# A code not found in a given filing - or an entire composite term, if any
-# one of its component codes is missing - shows as N/A rather than the row
-# being omitted, so every expected line always appears.
+# `term` is a CANONICAL display name, not the document's own wording; the
+# document's wording is kept as matched_label. is_cost=True marks a line that
+# must DISPLAY AS POSITIVE for a genuine cost - filings store an expense as a
+# NEGATIVE number in this net-income-walk style, so a negative is_cost value
+# after conversion means "a reversal, not a cost".
+#   → docs/knowledge/account-codes.md#標準化-term-與文件原本的措辭
 # ---------------------------------------------------------------------------
 
-# Ordered summary layout: the fixed sequence of lines "summary" mode always
-# outputs, each with a CANONICAL display term (not the document's own
-# wording, which varies across banks - e.g. 資產合計/資產總計/資產 all become
-# 總資產) - a deliberate departure from this mode's earlier "always use the
-# document's own label" rule, per explicit instruction to standardize
-# output terms for cross-bank comparability. The document's own label is
-# still kept (see collect_summary_rows' "matched_label" field) so nothing
-# is lost, just no longer what's shown as "term".
-# is_cost=True marks a line that should DISPLAY AS POSITIVE for a genuine
-# cost (see apply_cost_sign) - a real filing stores an expense as a
-# NEGATIVE number in this net-income-walk table style, so a positive
-# is_cost value after conversion means "this much cost", and a NEGATIVE
-# is_cost value means "this was actually a benefit/reversal, not a cost".
 SUMMARY_LAYOUT = [
     {"kind": "code", "code": "10000", "term": "總資產", "is_cost": False},
     {"kind": "code", "code": "4xxxx", "term": "淨收益", "is_cost": False},
@@ -70,17 +55,10 @@ SUMMARY_LAYOUT = [
     {"kind": "code", "code": "61001", "term": "稅前淨利", "is_cost": False},
     {"kind": "code", "code": "61003", "term": "所得稅費用", "is_cost": True},
     {"kind": "code", "code": "64000", "term": "稅後淨利", "is_cost": False},
-    # 活存比 has no account code (it's a disclosed ratio, not a coded
-    # balance-sheet/income-statement line) - matched purely by label text,
-    # like SUMMARY_LABEL_FALLBACKS' subtotal rows (see find_value_by_label),
-    # not through build_code_index's code-keyed batch pass. None of the 4
-    # banks' filings checked so far disclose it, so this exports N/A for
-    # now - kept as a row per explicit instruction, rather than only adding
-    # it once a filing with the label actually turns up.
-    # "活期性存款比率" is the real wording confirmed in the quarterly
-    # summarized fin-report disclosures (see collect_summary_rows_finsum) -
-    # kept alongside the earlier guessed wordings in case a full annual/
-    # quarterly filing ever uses different phrasing for the same ratio.
+    # 活存比 has no account code at all - label text only. N/A for every bank
+    # so far, and that is the CORRECT result: the filings carry only 活期存款
+    # balances, no disclosed ratio. Do not compute one.
+    #   → docs/knowledge/na-and-refusal.md#活存比為什麼永遠是-na
     {"kind": "label", "label_aliases": ["活期性存款比率", "活存性存款比率", "活存比"],
      "term": "活存比", "is_percent": True},
 ]
@@ -93,20 +71,16 @@ SUMMARY_LAYOUT = [
 # 58200 is 呆帳提存 under 金融業 but an insurance cost line under 保險業.
 # Applying this layout to the wrong industry does NOT fail; it relabels a real,
 # correctly-parsed number. So an industry with no layout is REFUSED, not
-# defaulted. 實際案例（國泰人壽） → docs/knowledge/financialReports.md#summary_layout-為什麼綁死產業
+# defaulted. 實際案例（國泰人壽）
+#   → docs/knowledge/industry-and-layout.md#summary_layout-為什麼綁死產業
 INDUSTRY_SUMMARY_LAYOUTS = {
     "金融業": SUMMARY_LAYOUT,
-    # 金控業 shares the bank layout: the per-bank override tables were built
-    # around FHC-consolidated scope in the first place (see
-    # SUMMARY_CODE_OVERRIDES_FINSUM's note on 63000/64000), so these codes
-    # are already exercised against FHC-scope rows. Not independently
-    # re-verified against a 金控's own filing - if one turns up whose rows
-    # don't line up, give it its own layout rather than widening this list.
+    # 金控業 shares the bank layout, but was never independently verified
+    # against a 金控's own filing. If one turns up whose rows don't line up,
+    # give it its OWN layout rather than widening this list.
     "金控業": SUMMARY_LAYOUT,
-    # 保險業 deliberately absent. A layout for it needs the 保險業 scheme's
-    # own codes for 保費收入/保險給付/etc., which nothing in this repo
-    # establishes - guessing them would produce exactly the mislabelling
-    # above, only harder to spot.
+    # 保險業 deliberately absent - its codes are not established anywhere in
+    # this repo, and guessing produces the mislabelling above, harder to spot.
 }
 
 
@@ -127,18 +101,14 @@ def summary_layout_error(industry):
 
 def apply_cost_sign(value, matched_label, is_cost):
     """Flip sign so a cost line displays positive (see SUMMARY_LAYOUT's
-    is_cost docs). Skipped when the document's OWN label already carries a
-    '減' ('less:'/deduct) prefix (confirmed in a real 中信 filing:
-    '減：所得稅費用' printed as a POSITIVE number) - that convention already
-    stores the value in "amount to subtract" form, i.e. already
-    cost-positive, so flipping it again would wrongly turn a normal expense
-    into an apparent benefit."""
+    is_cost docs). Skipped when the document's OWN label carries a '減：'
+    prefix - that convention already stores the value cost-positive, so
+    flipping again turns a normal expense into an apparent benefit."""
     if value is None or not is_cost:
         return value
-    # A '減：' PREFIX, not a bare '減' anywhere in the label: 減損 (impairment)
-    # and 減資 are ordinary line items that merely start with the character,
-    # and treating them as already-deducted left a normal expense negative,
-    # displaying as if it were a reversal.
+    # A '減：' PREFIX, never a bare '減' anywhere in the label: 減損 and 減資
+    # are ordinary line items that merely start with the character.
+    #   → docs/knowledge/account-codes.md#標準化-term-與文件原本的措辭
     if matched_label and matched_label.strip().startswith(("減：", "減:")):
         return value
     return -value
@@ -147,12 +117,12 @@ def apply_cost_sign(value, matched_label, is_cost):
 
 
 def _validate_profiles(profiles):
-    """Reject an incomplete or inconsistent entity profile at import time.
+    """Reject an incomplete or inconsistent entity profile at IMPORT time.
 
-    The whole point of consolidating six tables into one is that adding an
-    entity can't half-happen any more. A missing composites entry used to
-    surface as a single N/A row in one bank's summary - indistinguishable
-    from a genuinely undisclosed line, and only in that bank's output."""
+    The point of consolidating six tables into one is that adding an entity
+    can no longer half-happen: a missing composites entry surfaces as a single
+    N/A row in one bank's output, indistinguishable from a genuinely
+    undisclosed line. → docs/knowledge/entity-resolution.md#為什麼機構資料集中在一張表"""
     for name, profile in profiles.items():
         missing = _PROFILE_FIELDS - set(profile)
         extra = set(profile) - _PROFILE_FIELDS
@@ -211,25 +181,18 @@ def collect_summary_rows(folder, bank, period=1, verbose=False, coding=None,
       - crosscheck_value: ROA/ROE only, None for every other row (see
         collect_roa_roe - the manual-formula cross-check).
       - note: "" for a row that resolved cleanly. Set on ROA/ROE when the
-        cross-check diverges or the value is implausible (collect_roa_roe),
-        AND on every N/A row, saying WHY it's N/A - missing code, no
-        matching label, no composite formula for this bank. That reason is
-        also printed under -v, but the note is the only copy that reaches
-        the csv/excel exports, which is where the distinction between "not
-        disclosed" and "we failed to read this filing" actually matters.
-    concall_roa/concall_roe: an earnings-call deck's own reported ROA/ROE
-    (looked up by the caller via decks.py, since this module can't
-    import it - see collect_roa_roe), used as a fallback when this fin
-    folder has no reported 獲利能力 disclosure table of its own.
-    overrides_table: which per-bank code-override table to apply (defaults
-    to SUMMARY_CODE_OVERRIDES, for full individual filings) - passed as
-    SUMMARY_CODE_OVERRIDES_FINSUM by collect_summary_rows_finsum(), since
-    the quarterly summarized disclosure uses a different code scheme for
-    at least one bank (see that table's docs). Every other piece of logic
-    here (SUMMARY_LAYOUT, COMPOSITE_TERMS, label fallbacks, ROA/ROE, CIR)
-    is identical between the two document types - only the code-resolution
-    step differs, which is why this is a shared function with a swappable
-    table rather than a separate parallel implementation.
+        cross-check diverges or the value is implausible, AND on every N/A
+        row, saying WHICH KIND of N/A it is. The note is the only copy that
+        reaches the csv/excel exports - that is where "not disclosed" and
+        "we failed to read this filing" otherwise look identical.
+          → docs/knowledge/na-and-refusal.md#na-的六種成因
+    concall_roa/concall_roe: a deck's own reported ROA/ROE, supplied by the
+    caller (this module cannot import earningsCalls - it would be a cycle).
+    overrides_table: which per-bank code-override table to apply; defaults to
+    SUMMARY_CODE_OVERRIDES, swapped for SUMMARY_CODE_OVERRIDES_FINSUM by
+    collect_summary_rows_finsum. Only the code-resolution step differs
+    between the two document types, hence one function with a swappable
+    table rather than a parallel implementation.
     """
     # Resolved here rather than at the call sites: this is the only place
     # that knows a layout is about to be applied, so a future caller can't
@@ -351,17 +314,14 @@ def collect_summary_rows(folder, bank, period=1, verbose=False, coding=None,
                      "is_percent": False, "crosscheck_value": None, "note": ""})
 
     # --- CIR: abs(營業費用) / 淨收益, direct from THIS filing, no crosscheck.
-    # Previously computed on the con-call side from that deck's own
-    # 營業費用/營業收入 table, but that figure turned out to be a different
-    # scope from this fin_report's individual-entity 58400/4xxxx codes (e.g.
-    # a real 中信 4Q25 con-call page's revenue/opex were roughly an order of
-    # magnitude off fin_report's, not a rounding-level gap) - moved here per
-    # explicit instruction, no extra folder scan needed.
+    # Do not source it from a deck instead - that table is a different scope
+    # (~an order of magnitude off), so the same name would cover two
+    # different quantities. → docs/knowledge/ratios.md#cir-為什麼從法說會搬到財報
     #
-    # Read off the ROWS just built, not the raw code index: those two rows
+    # Read off the ROWS just built, NOT the raw code index: those two rows
     # have already been through the label fallback and SUMMARY_CODE_DERIVATIONS,
     # so a filing that states no 營業費用 total still gets a CIR instead of
-    # this silently disagreeing with the 營業費用 line printed right above it.
+    # silently disagreeing with the 營業費用 line printed right above it.
     # abs() makes the is_cost sign flip on the 營業費用 row irrelevant here.
     by_term = {r["term"]: r["value"] for r in rows}
     netrev_value, opex_value = by_term.get("淨收益"), by_term.get("營業費用")
@@ -403,22 +363,15 @@ def collect_summary_rows(folder, bank, period=1, verbose=False, coding=None,
 def collect_summary_rows_finsum(folder, bank, period=1, verbose=False, coding=None,
                                  concall_roa=None, concall_roe=None, industry=None):
     """Curated summary for a bank's quarterly SUMMARIZED fin-report
-    disclosure (依「公開發行銀行財務報告編製準則」第三十二條規定網站揭露財務
-    業務資訊) - a much shorter document (~10-15 pages) than the full
-    individual filing (~150-280), but confirmed (114Q4 CTBC/北富銀/國泰) to
-    use the exact same table shapes, code conventions, and section content
-    for every SUMMARY_LAYOUT item - including CTBC's dual-column balance
-    sheet (already handled by build_raw_lines' _split_dual_column_tables)
-    and a real 活期性存款比率 disclosure (see SUMMARY_LAYOUT's 活存比 entry).
-    The only genuine difference found is 稅後淨利's code varying by bank in
-    THIS document type specifically (see SUMMARY_CODE_OVERRIDES_FINSUM) -
-    everything else is identical, so this is a thin wrapper around
-    collect_summary_rows rather than a separate parsing implementation, per
-    explicit instruction to reuse the same logic as the full filing.
-    Deliberately NOT wired into any automatic/default code path - only
-    called once a caller (cli.py's folder classifier) has positively
-    identified a folder as this document type, never run on a folder just
-    because it happens to be a fin_report."""
+    disclosure (依「公開發行銀行財務報告編製準則」第三十二條).
+
+    A thin wrapper: the only confirmed difference from a full filing is
+    稅後淨利's per-bank code, hence one swapped override table rather than a
+    parallel parser. → docs/knowledge/account-codes.md#每機構的代碼覆寫
+
+    Deliberately NOT wired into any automatic path - only called once
+    cli.py's classifier has positively identified this document type, never
+    just because a folder happens to be a fin_report."""
     return collect_summary_rows(folder, bank, period=period, verbose=verbose, coding=coding,
                                  concall_roa=concall_roa, concall_roe=concall_roe,
                                  overrides_table=SUMMARY_CODE_OVERRIDES_FINSUM,
@@ -428,10 +381,9 @@ def collect_summary_rows_finsum(folder, bank, period=1, verbose=False, coding=No
 
 
 # Fraction of N/A rows above which a summary is more likely a failed read
-# than a genuinely absent disclosure. Deliberately generous: a handful of
-# N/A rows is ordinary (活存比 is N/A for every bank checked so far, and a
-# filing that truly doesn't disclose a line is a real result), so this has
-# to clear normal variation and only fire on wholesale failure.
+# than a genuinely absent disclosure. Deliberately generous - a handful of
+# N/A rows is ordinary, so this must clear normal variation and only fire on
+# wholesale failure.
 _SUMMARY_NA_WARN_RATIO = 0.5
 
 
@@ -440,19 +392,15 @@ _SUMMARY_NA_WARN_RATIO = 0.5
 def summary_coverage_warning(rows, folder=None):
     """A one-line warning when most of a summary came back N/A, else None.
 
-    Each N/A row carries its own reason in `note`, but that is per-row: it
-    says why THIS line is missing, not that the run as a whole went wrong. A
-    filing whose layout was simply misread produces output shaped exactly like
-    a successful one, and the csv/excel paths never print the rows for anyone
-    to notice.
+    Per-row notes say why THIS line is missing; this says the run as a whole
+    went wrong. A misread layout produces output shaped exactly like a
+    successful one, and the csv/excel paths never print the rows.
+      → docs/knowledge/na-and-refusal.md#整份讀錯的警告
 
-    N/A 的六種成因與各自的修法
-      → docs/knowledge/financialReports.md#na-的六種成因
-
-    ponytail: one flat ratio over all rows. If it turns out to be noisy, the
-    fix is a per-row 'expected N/A' flag in SUMMARY_LAYOUT (活存比 is the
-    known case), not a tuned constant - the constant can't tell the two
-    kinds of N/A apart no matter what it's set to."""
+    ponytail: one flat ratio over all rows. If it turns out noisy, the fix is
+    a per-row 'expected N/A' flag in SUMMARY_LAYOUT (活存比 is the known
+    case), not a tuned constant - no value of the constant can tell the two
+    kinds of N/A apart."""
     if not rows:
         return None
     missing = [r["term"] for r in rows if r["value"] is None]
@@ -474,14 +422,10 @@ def print_summary_rows(rows):
         found = r.get("matched_label") or "-"
         value_str = format_maybe_pct(r["value"], r.get("is_percent", False))
         line = f"{r['term']}\t{value_str}\t{found}\t({page_num(r['source_file'])})"
-        # Only surface the cross-check value when it's BOTH available AND
-        # something was actually flagged about this row (crosscheck_value is
-        # populated whenever the manual formula is derivable, whether or not
-        # it agrees - showing it unconditionally would defeat the earlier
-        # "don't show a cross-check that just confirms the primary value"
-        # design; requiring a note too keeps it hidden when everything
-        # agrees, and correctly hides it for the invariant-check row below,
-        # which always has a note but never a crosscheck_value at all).
+        # Show the cross-check only when it's available AND something was
+        # flagged: crosscheck_value is populated whenever the manual formula
+        # is derivable, agreeing or not, so requiring a note too is what keeps
+        # a merely-confirming cross-check off the output.
         if r.get("crosscheck_value") is not None and r.get("note"):
             line += f"\tcross-check: {format_pct(r['crosscheck_value'])}"
         print(line)

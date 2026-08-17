@@ -1,13 +1,9 @@
 """Find a term's value in one table: the right row, column, entity and unit.
 
 The widest decision surface in the project. Four independent filters compose
-here and each exists because of a real wrong number:
-  - entity_tier      a figure from the FHC parent or a sibling subsidiary is
-                     not this bank's figure (a real 富邦 deck produced 存放比
-                     72.17% from the mainland-China arm's RMB table)
-  - detect_unit_scale decks mix 百萬元 and 拾億元 across tables in one file
-  - share/growth      a "占比" column is not a balance
-  - percent cell      parse_numeric strips the '%', so 0.08% reads as 0.08
+here - entity_tier, detect_unit_scale, share/growth columns, percent cells -
+and each exists because of a real wrong number.
+  → docs/knowledge/earnings-call-matching.md#四個獨立的過濾器
 
 Sits on terms and periods; must not import summary - summary imports this.
 """
@@ -45,13 +41,10 @@ _PERCENT_CELL_RE = re.compile(r"[%％]")
 
 
 def _is_percent_cell(raw_cell):
-    """True if a raw table cell is written as a percentage. Balance-type
-    terms (loan balances - currency amounts) must never take a value from
-    one: parse_numeric strips the '%' sign, so '0.08%' becomes 0.08 and is
-    afterwards indistinguishable from a real balance. In a real 富邦 deck
-    that let 房貸 match the 房貸 column of a 業務別逾放比 (NPL-ratio-by-
-    business) table and report 0.08, and let 法說會放款餘額合計 match the
-    ratio row '逾期放款／總放款' and report 0.12."""
+    """True if a raw table cell is written as a percentage. Balance-type terms
+    must NEVER take a value from one: parse_numeric strips the '%', so '0.08%'
+    becomes 0.08 and is afterwards indistinguishable from a real balance.
+      → docs/knowledge/earnings-call-matching.md#四個獨立的過濾器"""
     return bool(_PERCENT_CELL_RE.search(raw_cell))
 
 
@@ -59,14 +52,10 @@ def _is_percent_cell(raw_cell):
 
 
 
-# A header[0] cell (or slide heading) counts as naming an ENTITY only if it
-# contains one of these company-type markers. This is deliberately an
-# allowlist rather than a blocklist of generic axis labels (項目/期間/年度/
-# ...): a blocklist silently treats any unlisted generic label as a company
-# name, which is exactly how '| Quarterly | 4Q22 | ... |' in a real 國泰 deck
-# came to be read as an entity named "Quarterly" and outranked by a
-# genuinely bank-named table, making NIM resolve to the annual FY25 figure
-# instead of the 4Q25 one sitting in that very table.
+# An ALLOWLIST of company-type markers, deliberately not a blocklist of
+# generic axis labels (項目/期間/年度/...): a blocklist silently treats any
+# unlisted generic label as a company name.
+#   → docs/knowledge/entity-resolution.md#為什麼是白名單而不是黑名單
 _ENTITY_NAME_RE = re.compile(
     r"銀行|金控|控股|人壽|產險|證券|投信|投顧|保險|公司|Bank|FHC|Holdings|Financial|Life|Securities|Insurance",
     re.IGNORECASE,
@@ -74,19 +63,18 @@ _ENTITY_NAME_RE = re.compile(
 
 
 
-# Preferred entity when a figure exists identically in more than one
-# entity's table (e.g. a bank subsidiary's own 營業費用 vs its FHC parent's
-# consolidated 營業費用) - this term dictionary is built around bank-level
-# concepts throughout (存放比, 放款結構, NIM, ...), so the bank-named table
-# is preferred over one merely containing "金控"/holding-company language.
+# Preferred entity when a figure exists identically in more than one entity's
+# table: this term dictionary is bank-level throughout (存放比, NIM, ...), so a
+# bank-named table beats one merely containing 金控 language.
 _BANK_LABEL_HINT = "銀行"
 
 
 
-# The PRIMARY bank subsidiary each deck is about - see BANK_PROFILES'
-# primary_entities field for why picking the wrong subsidiary is worse than
-# reporting nothing. Derived rather than held here so that adding an entity
-# is one edit in one place, and so statements's profile validation covers it.
+# The PRIMARY bank subsidiary each deck is about. Picking the WRONG subsidiary
+# is worse than reporting nothing - their row labels are identical.
+# DERIVED, not held here, so adding an entity stays one edit in one place and
+# summary's profile validation covers it.
+#   → docs/knowledge/entity-resolution.md#primary_entities
 PRIMARY_BANK_ENTITIES = {name: profile["primary_entities"]
                          for name, profile in BANK_PROFILES.items()}
 
@@ -97,12 +85,10 @@ def entity_tier(entity, primary_aliases):
     """Rank an entity name for bank-level term matching:
       2 = the deck's primary bank subsidiary (e.g. 台北富邦銀行)
       1 = no entity named - a generic/unscoped table, the common case
-      0 = some OTHER named company (another bank subsidiary, the FHC
-          parent, an insurance/securities arm) - must not supply
-          bank-level figures.
-    primary_aliases may be None (bank unknown), in which case any
-    bank-named entity is treated as primary, preserving the older
-    _BANK_LABEL_HINT-only behaviour rather than rejecting everything."""
+      0 = some OTHER named company - must NOT supply bank-level figures.
+    primary_aliases may be None (bank unknown), in which case any bank-named
+    entity is treated as primary rather than rejecting everything.
+      → docs/knowledge/entity-resolution.md#法說會表格的機構分層"""
     if not entity:
         return 1
     if primary_aliases is None:
@@ -130,10 +116,10 @@ def _heading_topic(heading_text):
 
 def collect_headings(lines):
     """Return list of (line_idx, raw_text, topic_text) for every markdown
-    heading line ('#'..'######') in `lines`. raw_text is the heading as
-    written (e.g. '富邦金控－財務摘要'); topic_text has the leading
-    '公司名－' prefix stripped (see _heading_topic), for term-matching use
-    where the always-present company name would throw off matching."""
+    heading line in `lines`. raw_text is as written ('富邦金控－財務摘要');
+    topic_text has the '公司名－' prefix stripped. Term matching wants
+    topic_text; ENTITY detection needs raw_text - the prefix is exactly what
+    it looks for."""
     headings = []
     for idx, (_pn, line) in enumerate(lines):
         m = _HEADING_LINE_RE.match(line)
@@ -146,14 +132,10 @@ def collect_headings(lines):
 
 
 def nearest_heading(headings, table_line_idx):
-    """The (raw_text, topic_text) of the last heading appearing before
-    `table_line_idx`, or None if there isn't one - used when a table's own
-    row/column labels are too generic to identify a term (e.g. '放款餘額'/
-    '占全行放款'), but the term is actually the slide's section title above
-    the table (e.g. '## 外幣放款'), a pattern confirmed in a real
-    earnings-call deck. raw_text is also used for entity detection (e.g.
-    spotting a '金控'/FHC-parent-labeled slide) since topic_text has the
-    company name stripped out."""
+    """The (raw_text, topic_text) of the last heading before `table_line_idx`,
+    or None - used when a table's own labels are too generic to identify a
+    term but the slide's section title names it.
+      → docs/knowledge/earnings-call-matching.md#用標題當退路時的唯一欄規則"""
     preceding = [h for h in headings if h[0] < table_line_idx]
     if not preceding:
         return None
@@ -165,14 +147,13 @@ def nearest_heading(headings, table_line_idx):
 
 def _row_sections(rows):
     """For a col_period table, map each row index to the nearest preceding
-    'bare' row's text (non-blank first cell, every other cell blank) - e.g.
-    a '台幣'/'外幣'/'整體' row acting as an inline sub-section header for
-    the metric rows beneath it (confirmed in a real 中信金 deck, where
-    '放款利率'/'存款利率' repeat verbatim once per currency section with no
-    currency wording in the metric row's own label). None for rows with no
-    such preceding header, or for a header row itself. Lets negative_terms
-    veto a candidate by its enclosing section even when the row's own label
-    text has nothing to veto on."""
+    'bare' row's text (non-blank first cell, every other cell blank) - e.g. a
+    '台幣'/'外幣'/'整體' row acting as an inline sub-section header.
+
+    Lets negative_terms veto a candidate by its ENCLOSING SECTION even when
+    the row's own label has nothing to veto on - decks repeat 放款利率/存款利率
+    verbatim once per currency section with no currency wording in the label.
+      → docs/knowledge/earnings-call-matching.md#標題也要套-negative_terms"""
     sections = {}
     current = None
     for idx, row in enumerate(rows):
@@ -189,18 +170,13 @@ def _row_sections(rows):
 # ---------------------------------------------------------------------------
 # Table unit detection.
 #
-# Decks do NOT use one unit throughout - confirmed in a real 中信金 deck
-# where the loan-balance table on one page is 新台幣-百萬元 while the
-# 外幣放款成長率 table it gets combined with is 新台幣拾億元, a 1000x gap.
-# Any cross-table arithmetic (see LOAN_RECOMPOSITION) is therefore wrong
-# unless both sides are converted to a common unit first. Everything is
-# normalised to 十億元 (NT$ billions), the unit every bank's headline loan
-# table already uses (confirmed for all 4 banks' Q4 2025 decks: NT$BN,
-# 新台幣拾億元, NT$十億元, 新臺幣拾億元 - so normalisation is a no-op there
-# and only kicks in on the mixed-unit decks it exists to fix).
+# Decks do NOT use one unit throughout (百萬元 and 拾億元 in one file, a 1000x
+# gap), so any cross-table arithmetic - see LOAN_RECOMPOSITION - is wrong
+# unless both sides are normalised to 十億元 first.
 #
-# Longer tokens are listed BEFORE their own substrings ('拾億'/'十億' before
-# '億') so the more specific unit wins the match.
+# Longer tokens MUST stay listed before their own substrings ('拾億'/'十億'
+# before '億') so the more specific unit wins.
+#   → docs/knowledge/reading-tables.md#單位不是全篇一致
 # ---------------------------------------------------------------------------
 _UNIT_TO_BILLIONS = [
     ("兆", 1e3),
@@ -237,12 +213,10 @@ def _unit_scale_from_text(text):
 
 def detect_unit_scale(lines, table, lookback=8):
     """Multiplier converting `table`'s figures to 十億元. Checks the table's
-    own leading header cell first (some decks put the unit there, e.g.
-    '| 新台幣-百萬元,% | 2022 | ...'), then walks backwards through the lines
-    just above the table for a '單位：...' style declaration. Defaults to 1.0
-    (assume 十億元) when nothing is declared - the conservative choice, since
-    it leaves already-correct output unchanged rather than rescaling on a
-    guess."""
+    own leading header cell first, then walks backwards for a '單位：...'
+    declaration. Defaults to 1.0 when nothing is declared - the conservative
+    choice, leaving already-correct output unchanged rather than rescaling on
+    a guess."""
     texts = []
     header = table.get("header") or []
     if header:
@@ -268,29 +242,18 @@ def find_value_in_table(table, term_spec, desired_period_label=None, prefer_abso
     (e.g. '企業放款' matching both '企業放款' and '企業放款占比'), prefer
     the one that doesn't look like a percentage/share/growth column, then
     break remaining ties by shortest header text (most exact match).
-    prefer_quarterly: see _pick_latest_period - pass True for ratio terms
-    whose curated output is meant to be a single quarter's figure.
-    heading: the nearest preceding section title (see nearest_heading) -
-    used as a fallback (col_period orientation only) when no row label
-    identifies the term but the table's own section heading does (e.g. a
-    '## 外幣放款' slide whose table rows are just generically labeled
-    '放款餘額'/'占全行放款') - confirmed against a real earnings-call deck.
+    prefer_quarterly: pass True for ratio terms whose curated output is meant
+    to be a single quarter's figure.
+    heading: the nearest preceding section title, used as a fallback when no
+    row/column label identifies the term but the slide's own heading does.
+
     Returns (value, matched_label, period_label, strength, entity, is_percent)
-    or None - strength lets callers prefer the best match found across an
-    entire folder rather than just the first one encountered (see
-    find_term_value); entity is the table's header[0] text when it names a
-    specific company (e.g. '國泰世華銀行' vs '國泰金控' - the same figure,
-    like 營業費用, can legitimately appear once per entity in a multi-entity
-    appendix table), or None when header[0] is just a generic column label.
-    is_percent is True when the matched cell's raw text carries a '%'/'％'
-    sign - parse_numeric() strips that sign off, so without this flag a
-    generic ad-hoc term lookup (unlike the curated summary, which already
-    knows which of its terms are ratios) has no way to tell whether a
-    printed '1.27' means '1.27%' or a plain count/balance of 1.27 - see
-    format_maybe_pct(), used by callers that don't already know the term's
-    kind. heading may be the (raw_text, topic_text) tuple from
-    nearest_heading(), or a plain string/None for callers that don't need
-    the entity-detection fallback."""
+    or None. NOTE find_term_value, which wraps this, returns the first two the
+    OTHER way round - see its docstring before touching either.
+      - strength lets callers prefer the best match across a whole folder.
+      - entity is header[0] when it names a company, else None.
+      - is_percent flags a '%' in the raw cell: parse_numeric strips the sign,
+        so an ad-hoc lookup otherwise cannot tell '1.27%' from a plain 1.27."""
     detected = detect_orientation(table)
     if detected is None:
         return None
@@ -299,12 +262,10 @@ def find_value_in_table(table, term_spec, desired_period_label=None, prefer_abso
 
     heading_raw, heading = (heading if isinstance(heading, tuple) else (heading, heading))
 
-    # A term's negative_terms veto its own row/column label (see
-    # match_strength); apply them to the slide heading too, since the
-    # heading is the label's context. In a real 富邦 deck a column headed
-    # plainly '存放比' sits under '外幣放款及債券投資佔外幣存款比例' - an
-    # FX-only ratio that the label alone gives no way to tell apart from
-    # the overall loan-to-deposit ratio the term means.
+    # negative_terms veto the row/column label AND the slide heading - the
+    # heading is the label's context, and a column plainly headed '存放比' can
+    # sit under an FX-only ratio the label alone cannot distinguish.
+    #   → docs/knowledge/earnings-call-matching.md#標題也要套-negative_terms
     if term_spec.negative_terms and heading_raw and _contains_any(heading_raw, term_spec.negative_terms):
         return None
 
@@ -314,14 +275,10 @@ def find_value_in_table(table, term_spec, desired_period_label=None, prefer_abso
         if _ENTITY_NAME_RE.search(h0):
             entity = h0
     if entity is None and heading_raw and _ENTITY_NAME_RE.search(heading_raw):
-        # The table's own header[0] doesn't name a company (it's a generic
-        # axis label like "項目"/"Quarterly"), so fall back to the RAW
-        # section heading when IT names one (e.g. "富邦華一銀行－財務摘要"),
-        # so another subsidiary's table can still be told apart from the
-        # primary bank's downstream (see entity_tier / _best_match_in_file).
-        # Deliberately uses heading_raw, not the topic-stripped `heading`,
-        # since topic-stripping removes exactly the company-name prefix
-        # this check needs.
+        # header[0] is a generic axis label, so fall back to the RAW section
+        # heading when IT names a company. Must be heading_raw, never the
+        # topic-stripped `heading` - stripping removes exactly the company
+        # prefix this check needs.
         entity = heading_raw
 
     if orientation == "row_period":
@@ -339,15 +296,11 @@ def find_value_in_table(table, term_spec, desired_period_label=None, prefer_abso
             col_idx, col_header, strength = min(candidates, key=lambda t: len(t[1]))
         else:
             # No column header names the term - fall back to the slide's own
-            # section heading, mirroring the col_period branch (e.g. a
-            # '## 外幣放款' slide whose only value column is generically
-            # labelled '餘額'). Deliberately requires EXACTLY ONE candidate
-            # value column (after dropping the period column and any
-            # share/growth column): with two or more the heading tells us
-            # the topic but not which column it refers to, and guessing
-            # there is how a currency-split table like 富邦's
-            # '企業授信餘額（依幣別）' (台幣授信 | 外幣授信) would silently
-            # yield half the figure. Ambiguous -> no match, not a guess.
+            # section heading. Requires EXACTLY ONE candidate value column:
+            # with two or more the heading gives the topic but not the column,
+            # and guessing yields half a currency-split figure.
+            # Ambiguous -> no match, never a guess.
+            #   → docs/knowledge/na-and-refusal.md#判不出來就拒絕在這個-codebase-的實作
             if not heading:
                 return None
             strength = match_strength(term_spec, heading)
@@ -386,12 +339,10 @@ def find_value_in_table(table, term_spec, desired_period_label=None, prefer_abso
         candidates = [(idx, r, s) for idx, r, s in candidates
                       if not (sections.get(idx) and _contains_any(sections[idx], term_spec.negative_terms))]
     if require_absolute:
-        # Mirrors the row_period branch's header filtering: without this, a
-        # share/percentage-labeled row (e.g. '外幣放款佔全行放款') can win
-        # the tie-break over the real absolute-value row it shares a match
-        # strength with, and then every period in THAT row gets filtered
-        # out by the require_absolute check below, yielding None instead of
-        # ever trying the correct row (confirmed in a real 國泰金 deck).
+        # Mirrors the row_period branch's header filtering. Without it a
+        # share-labelled row wins the tie-break over the absolute-value row it
+        # shares a strength with, then every period in THAT row is filtered
+        # out below - yielding None without ever trying the correct row.
         absolute_only = [(idx, r, s) for idx, r, s in candidates if not _is_share_or_growth_column(r[0])]
         if absolute_only:
             candidates = absolute_only
@@ -406,15 +357,11 @@ def find_value_in_table(table, term_spec, desired_period_label=None, prefer_abso
         strength = match_strength(term_spec, heading)
         if strength == 0:
             return None
-        # Mirrors the row_period branch's "exactly one value column" rule:
-        # safe only when the table is genuinely about ONE thing the heading
-        # names (e.g. a '## 外幣放款' slide whose rows are just absolute vs.
-        # share views of the same figure). If several distinct, unrelated
-        # line items remain (e.g. a general '各類放款佔比' breakdown where
-        # the heading only mentions the term in a passing footnote), picking
-        # "the first one" is a guess, not a match - confirmed in a real
-        # 中信金 deck where this previously grabbed an unrelated corporate-
-        # loan row for a term (信用卡循環) that had no row of its own.
+        # Mirrors the row_period branch's "exactly one value row" rule: safe
+        # only when the table is genuinely about ONE thing the heading names.
+        # With several unrelated line items left, picking the first is a
+        # guess - it once grabbed a corporate-loan row for 信用卡循環.
+        #   → docs/knowledge/na-and-refusal.md#判不出來就拒絕在這個-codebase-的實作
         non_share = [r for r in rows if r and r[0].strip()
                      and not all(not c.strip() for c in r[1:])
                      and not _is_share_or_growth_column(r[0])]
@@ -449,16 +396,11 @@ def find_value_in_table(table, term_spec, desired_period_label=None, prefer_abso
 
 def _rank_key(strength, entity, period_label=None, prefer_quarterly=False, primary_aliases=None):
     """Sort key preferring, in order: higher match strength; then the deck's
-    primary bank subsidiary's own table over an unscoped one (see
-    entity_tier - a table belonging to some OTHER named company scores 0
-    and is rejected outright by callers, not merely deprioritised); then,
-    if prefer_quarterly, a result whose period is sub-annual (quarter/half/
-    9-month) over one that's only annual - two equally-good alias matches
-    for the same term (e.g. '營收' with only annual data vs '營業收入' with
-    quarterly data) shouldn't silently resolve to whichever file sorts
-    first when the whole point is to compare quarter-to-quarter figures
-    (e.g. CIR's 營業費用 and 淨收益 inputs must come from the same
-    granularity, not a quarterly expense against an annual revenue)."""
+    primary bank subsidiary's table over an unscoped one (tier 0 is rejected
+    outright by callers, not merely deprioritised); then, with
+    prefer_quarterly, a sub-annual period over an annual one - two equally
+    good alias matches must not resolve by which file sorts first when the
+    point is comparing quarter to quarter."""
     tier = entity_tier(entity, primary_aliases)
     quarterly_bonus = 0
     if prefer_quarterly and period_label:
@@ -474,17 +416,15 @@ def _best_match_in_file(doc_path, term_spec, prefer_quarterly=False, primary_ali
                          require_absolute=False):
     """Search every table in a single file for term_spec and return the best
     local match: (rank_key, value, matched_label, period_label, entity,
-    is_percent, unit_scale), or None if term_spec doesn't appear in this
-    file at all. unit_scale is the multiplier converting that table's
-    figures to 十億元 (see detect_unit_scale) - carried alongside rather
-    than applied here, so ratio terms (which are unitless) and the CIR
-    inputs (a ratio of two figures, where a shared unit cancels) can ignore
-    it while balance terms normalise by it.
-    Tables belonging to a named entity that ISN'T the deck's primary bank
-    (entity_tier 0 - another bank subsidiary, the FHC parent, an insurance/
-    securities arm) are skipped outright rather than ranked low: their row
-    labels are identical to the primary bank's (存放比, 總放款, 營業費用) but
-    the figures are a different company's, often in a different currency."""
+    is_percent, unit_scale), or None.
+
+    unit_scale is CARRIED, not applied here, so unitless callers can ignore it
+    while balance terms normalise by it.
+
+    Tables at entity_tier 0 are SKIPPED OUTRIGHT, never ranked low: their row
+    labels are identical to the primary bank's but the figures are another
+    company's, often in another currency.
+      → docs/knowledge/entity-resolution.md#法說會表格的機構分層"""
     lines = build_raw_lines(doc_path)
     if term_spec.search_start:
         lines = restrict_section(lines, term_spec.search_start, term_spec.search_end)
@@ -512,26 +452,20 @@ def _best_match_in_file(doc_path, term_spec, prefer_quarterly=False, primary_ali
 
 def find_term_value(folder, term_spec, verbose=False, prefer_quarterly=False, primary_aliases=None,
                      require_absolute=False):
-    """Search every .md file/table in `folder` for term_spec and return the
-    BEST match found across the whole folder (see _rank_key: highest
-    match_strength first, then a bank-named entity over a non-bank one),
-    not just the first one encountered - a generic term can be an exact or
-    substring match in more than one entity's table (e.g. 營業費用 appears,
-    identically named, in both a bank subsidiary's own figures and its FHC
-    parent's consolidated figures), and the first-found one isn't
-    necessarily the right one. Stops early only once a same-entity-type
-    exact match is found (rank (3, 1) - nothing can outrank it).
-    prefer_quarterly: see find_value_in_table/_pick_latest_period. Returns
-    (matched_label, value, source_file, period_label, is_percent,
-    unit_scale), or None if term_spec doesn't appear in any table.
+    """Search every .md file/table in `folder` and return the BEST match
+    across the WHOLE folder, not the first one found - a generic term can
+    match identically in more than one entity's table, and first-found is not
+    necessarily right. Stops early only on rank (3, 2) or (3, 2, 1), which
+    nothing can outrank.
+
+    Returns (matched_label, value, source_file, period_label, is_percent,
+    unit_scale), or None.
+
     NOTE the first two are the OPPOSITE way round from find_value_in_table,
     which this wraps: that one returns (value, matched_label, ...). Both are
-    6-tuples, both are consumed positionally, and the two orders are pinned
-    side by side in test_l2_lookup.py - do not "fix" one to match the other
-    without changing every caller.
-    unit_scale is the multiplier to 十億元 for the table the value came off
-    (see detect_unit_scale); the raw as-printed value is returned unscaled
-    so unitless callers can ignore it."""
+    6-tuples, both are consumed positionally, and both orders are pinned side
+    by side in test_l2_lookup.py - do NOT "fix" one to match the other.
+      → docs/knowledge/earnings-call-matching.md#find_term_value-的回傳順序陷阱"""
     best = None  # (rank_key, value, matched_label, source_file, period_label, is_percent, unit_scale)
     best_possible = (3, 2, 1) if prefer_quarterly else (3, 2, 0)
     for doc_path in sorted(Path(folder).rglob("*.md")):
@@ -556,13 +490,11 @@ def find_term_value(folder, term_spec, verbose=False, prefer_quarterly=False, pr
 
 
 def extract_term(folder, term_spec, verbose=False):
-    """Scan every .md file/table in `folder` for term_spec and return every
-    match found (unlike find_term_value, which returns only the single
-    strongest). Returns a list of {term, label_in_doc, value, source_file,
-    period_label, is_percent} - is_percent (see find_value_in_table) lets
-    the caller print '%' on values it wouldn't otherwise know are ratios
-    (unlike the curated summary, this ad-hoc search has no RATIO_TERMS/
-    BALANCE_TERMS list to tell it in advance)."""
+    """Scan every .md file/table in `folder` and return EVERY match found,
+    unlike find_term_value which returns only the strongest. Returns a list of
+    {term, label_in_doc, value, source_file, period_label, is_percent} -
+    is_percent matters here because this ad-hoc search, unlike the curated
+    summary, has no RATIO_TERMS/BALANCE_TERMS list to tell it in advance."""
     results = []
     for doc_path in sorted(Path(folder).rglob("*.md")):
         lines = build_raw_lines(doc_path)

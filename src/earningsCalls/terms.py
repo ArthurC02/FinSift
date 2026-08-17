@@ -33,9 +33,8 @@ class TermSpec:
     def from_dict(cls, name, d):
         components = []
         for c in d.get("components", []):
-            # Component(**c) on its own raised a bare TypeError naming neither
-            # the file, the term nor the field - see load_terms, which turns
-            # what's raised here into a message that says where to look.
+            # Name the offending field: Component(**c) alone raises a bare
+            # TypeError naming neither the file, the term, nor the field.
             if not isinstance(c, dict):
                 raise ValueError(f"component must be an object, got {type(c).__name__}")
             missing = sorted({"terms", "weight"} - set(c))
@@ -47,10 +46,10 @@ class TermSpec:
                     + (f"; unexpected {extra}" if extra else ""))
             components.append(Component(**c))
 
-        # An empty alias is a substring of every string, so one blank entry
-        # silently makes its term match EVERY row in the folder at strength 2,
-        # outranking any composite. Same for a blank negative term, which
-        # would veto everything instead.
+        # A blank alias is a substring of EVERY string: one of them makes its
+        # term match every row in the folder at strength 2, outranking any
+        # composite. A blank negative term vetoes everything instead.
+        #   → docs/knowledge/earnings-call-matching.md#空白別名為什麼是信任邊界
         for field, values in (("aliases", d.get("aliases", [])),
                               ("negative_terms", d.get("negative_terms", []))):
             for v in values:
@@ -85,9 +84,8 @@ def load_terms(config_path):
         try:
             terms[name] = TermSpec.from_dict(name, d)
         except (TypeError, ValueError) as e:
-            # Say which file and which term. A bare TypeError from
-            # Component(**c) gave the user nothing to search a 400-term config
-            # for.
+            # Say which file and which term - otherwise there is nothing to
+            # search a 400-term config for.
             raise ValueError(f"{config_path}: term '{name}' is invalid - {e}") from e
     return terms
 
@@ -95,15 +93,14 @@ def load_terms(config_path):
 
 
 def match_strength(term_spec, text):
-    """0 = no match (or vetoed by a negative term); 1 = composite (weighted
-    sub-term score cleared threshold, Layer 2); 2 = substring alias hit
-    (Layer 1); 3 = exact alias hit (the whole, stripped text equals an
-    alias exactly). Exact beats substring beats composite - a generic
-    total-level term like 淨收益 is a literal substring of many unrelated
-    compound line items (手續費淨收益合計, 利息淨收益, ...), so accepting
-    the first substring hit found anywhere in the folder can silently grab
-    the wrong row; preferring the strongest match found across the whole
-    folder (see find_term_value) avoids that."""
+    """0 = no match (or vetoed by a negative term); 1 = composite; 2 =
+    substring alias hit; 3 = exact alias hit (whole stripped text equals an
+    alias).
+
+    Exact beats substring beats composite, and callers must prefer the
+    strongest match across the WHOLE folder rather than the first: 淨收益 is a
+    literal substring of many unrelated compound line items.
+      → docs/knowledge/earnings-call-matching.md#match_strength-的三層"""
     if term_spec.negative_terms and _contains_any(text, term_spec.negative_terms):
         return 0
     if term_spec.aliases:

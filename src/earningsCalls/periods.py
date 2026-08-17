@@ -12,32 +12,16 @@ import re
 
 
 # ---------------------------------------------------------------------------
-# Header-aware, orientation-detecting table extraction.
+# Period labels, and which axis carries them.
 #
-# Verified against a real earnings-call deck (52-page 國泰世華銀行 4Q25
-# analyst meeting): con-call slide tables come in (at least) two different
-# orientations, sometimes both on the same page:
-#   - "row_period": each DATA ROW is one period (e.g. FY24, FY25), and the
-#     HEADER names each metric/category as its own column (a loan-structure
-#     table: 企業放款, 房屋貸款, ... each with its own 金額 column and a
-#     separate 占比 column right after it).
-#   - "col_period": each DATA ROW is one metric/entity (e.g. 整體逾放比,
-#     Spread, NIM, or a subsidiary name), and the HEADER names each period
-#     as its own column - the same shape already built for 玉山金控's
-#     transposed 獲利能力 table in statements.py.
-# Real periods are also heterogeneous granularity in the same table (FY25,
-# 1Q25, 1H25, 9M25, 4Q25 all appear together across the deck), and a table
-# can have non-period columns mixed in among real period columns (e.g. a
-# "FY25/FY24 % Chg" growth column, or a "企業放款占比" percentage-share
-# column sitting right next to "企業放款"'s own absolute-value column) -
-# so orientation is detected by majority vote (most, not all, of an axis's
-# cells parsing as a period), and a period-label parse failure on a given
-# column/row just excludes that one column/row rather than breaking
-# detection for the whole table.
+# Two orientations, sometimes both on one page; heterogeneous granularity in
+# one table (FY25/1Q25/1H25/9M25/4Q25); and non-period columns mixed in among
+# the real ones. So orientation is a MAJORITY vote and a parse failure
+# excludes one column/row rather than the whole table.
 #
-# This replaces an earlier row-only/positional design (assuming one row per
-# term, values listed most-recent-first like the financial-statement
-# tables) - real con-call slides don't follow that convention at all.
+# A cell that isn't purely a period label ('FY25/FY24 % Chg', '企業放款占比')
+# must FAIL to parse - being excluded is the correct outcome, not a loss.
+#   → docs/knowledge/reading-tables.md#期別標籤有幾種寫法
 # ---------------------------------------------------------------------------
 
 _FY_RE = re.compile(r"^FY(\d{2,4})$", re.IGNORECASE)
@@ -74,13 +58,11 @@ _YEAR_MONTH_RE = re.compile(r"^((?:19|20)\d{2})[./\-](0?[1-9]|1[0-2])$")
 
 
 
-# Decks routinely mark their newest ("查核數"/audited) column with a trailing
-# footnote reference glued directly onto the period label - either a Unicode
-# superscript digit ('2Q25¹') or a literal '<sup>N</sup>' tag ('Jun 25<sup>1</sup>'),
-# confirmed in a real 中信金 2Q25 deck. Left unstripped, this breaks every
-# period regex below (all anchored with $), silently excluding the newest
-# column from ranking and making the tool report the second-newest quarter
-# as if it were current.
+# Decks glue a footnote reference onto the NEWEST column's period label
+# ('2Q25¹', 'Jun 25<sup>1</sup>'). Every period regex below is anchored with
+# $, so leaving it unstripped silently excludes the newest column from
+# ranking and reports the second-newest quarter as current.
+#   → docs/knowledge/reading-tables.md#腳註上標
 _FOOTNOTE_TAG_RE = re.compile(r"(?:<sup>\d+</sup>)+$", re.IGNORECASE)
 
 
@@ -100,9 +82,9 @@ def _strip_period_footnote(cell):
 def _normalize_year(y):
     """Two-digit -> 20xx, three-digit -> ROC (民國) -> Western, four-digit as-is.
 
-    A 3-digit year in these documents is always a ROC year: 民國114 = 2025.
-    Leaving it at 114 put it below every 19xx/20xx label, so a ROC-dated column
-    could never win as "most recent" and mixed-notation decks sorted wrongly.
+    A 3-digit year here is always ROC: 民國114 = 2025. Left at 114 it sorts
+    below every 19xx/20xx label, so a ROC-dated column can never win as "most
+    recent". → docs/knowledge/reading-tables.md#民國年西元年季度
     """
     y = int(y)
     if y < 100:
@@ -167,11 +149,9 @@ def _majority_are_periods(cells):
 
 def _detect_period_column(rows, max_check_cols=3):
     """For row_period orientation, find which column index holds period
-    labels across most rows - not assumed to always be column 0, since some
-    tables have a leading qualifier column before the actual period column
-    (e.g. '項目'='單季'/'全年' before '期間', confirmed in a real CTBC deck's
-    NIM table). Returns the best-scoring column index, or None if no column
-    has a majority of rows parsing as periods."""
+    labels across most rows. NOT assumed to be column 0 - some tables carry a
+    leading qualifier column ('項目'='單季'/'全年') before the period column.
+    Returns the best-scoring index, or None if no column has a majority."""
     if not rows:
         return None
     n_cols = max(len(r) for r in rows)
@@ -190,9 +170,10 @@ def _detect_period_column(rows, max_check_cols=3):
 
 def detect_orientation(table):
     """Return ('row_period', period_col_idx) if data rows have a column of
-    mostly period labels, ('col_period', None) if header cells (excluding
-    the first) are mostly period labels, or None if neither axis looks like
-    periods (table skipped rather than guessed at)."""
+    mostly period labels, ('col_period', None) if header cells (excluding the
+    first) are mostly period labels, or None if NEITHER axis looks like
+    periods - the table is then skipped, never guessed at.
+      → docs/knowledge/reading-tables.md#哪一軸是期別"""
     period_col = _detect_period_column(table["rows"])
     if period_col is not None:
         return ("row_period", period_col)
@@ -205,35 +186,25 @@ def detect_orientation(table):
 
 
 def _rank_periods(period_items, prefer_quarterly=False):
-    """period_items: list of (period_key, row_or_col). Returns them sorted
-    most-to-least preferred, so a caller can walk down the list and use the
-    first one that actually has a usable (non-blank) value, rather than
-    committing to a single 'best' choice that might turn out blank for this
-    particular row/column (e.g. a ratio-only row with figures for FY23-25
-    but nothing in the 4Q24/4Q25 columns that other rows in the same table
-    do use).
+    """period_items: list of (period_key, row_or_col), returned sorted
+    most-to-least preferred - a LIST, not one 'best', so a caller can walk
+    down to the first entry that actually has a non-blank value.
 
-    Ordinarily this is just most-recent-period-first. With prefer_quarterly,
-    a same-year rank-4 entry (a true single Q4, or an equivalent month label
-    like 'Dec 25') is ranked above a same-year rank-5 one (FY/bare-year/12M
-    cumulative) - both close on the same date, and the curated summary's
-    '單季' (single-quarter) output wants the genuine single-quarter figure,
-    not the cumulative one. This does NOT extend to rank 1-3 (1Q/1H/9M) -
-    those are genuinely earlier/less-complete periods within the year, not
-    equally-valid alternatives to the annual figure, so e.g. '9M25' still
-    correctly ranks below 'FY25' rather than being preferred just for being
-    < rank 5."""
+    prefer_quarterly ranks a same-year rank-4 entry (a true single Q4, or an
+    equivalent month label) above a same-year rank-5 one (FY/bare-year/12M).
+    It does NOT extend to ranks 1-3 - '9M25' is a genuinely earlier period,
+    not an alternative to the annual figure.
+      → docs/knowledge/reading-tables.md#單季與累計的取捨"""
     if not prefer_quarterly:
         return sorted(period_items, key=lambda t: t[0], reverse=True)
     latest_year = max(k[0] for k, _ in period_items)
 
     def sort_key(item):
         k, _ = item
-        # A genuine single-quarter label (4Q25, or a month label like Dec 25)
-        # gets an INTEGER rank; an N-month cumulative label gets months/3, a
-        # float - and 12M25 lands on exactly 4.0. Only the integer form is a
-        # real single quarter, so without the type check a 12-month CUMULATIVE
-        # figure was pulled ahead of FY25 and shown in the 單季 column.
+        # KEEP the isinstance check. A real single quarter gets an INTEGER
+        # rank; an N-month cumulative gets months/3, a float - and 12M25 lands
+        # on exactly 4.0, so without it a 12-month CUMULATIVE figure outranks
+        # FY25 and shows up in the 單季 column.
         is_q4_this_year = 1 if (k[0] == latest_year and k[1] == 4
                                 and isinstance(k[1], int)) else 0
         return (is_q4_this_year, k)
