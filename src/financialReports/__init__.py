@@ -32,6 +32,10 @@ from financialReports.ratios import (collect_roa_roe, collect_ratio_rows, comput
                     _ROE_PLAUSIBLE_MIN, _ROE_PLAUSIBLE_MAX,
                     _ROA_ROE_CROSSCHECK_DIVERGENCE_FACTOR)
 from core.industry import INDUSTRY_CODING_FILES, detect_industry_category
+# page_num is core's, but cli formats BOTH extractors' rows and takes it off
+# THIS facade. Left out during packaging, it raised on every real fin_report
+# run; now pinned by tools/undefined.py's module-attribute pass.
+from core.text import page_num
 from financialReports.statements import (STATEMENTS, UNSUPPORTED_STATEMENT_MSG,
                      load_code_dictionary, resolve_coding_path, extract_statement,
                      collect_statement_rows, print_statement_rows, write_statement_csv,

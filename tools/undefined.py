@@ -105,7 +105,52 @@ for name, mod in sorted(loaded.items()):
                               f"(defined in {provided[used]})")
                         problems += 1
 
-print(f"\n{len(loaded)}/{len(MODULES)} modules checked, {problems} missing-import reference(s)")
+# ---------------------------------------------------------------------------
+# Second pass: attributes read off an IMPORTED MODULE (`fin.page_num`).
+#
+# The pass above reads LOAD_GLOBAL, so it sees a lost import but not a lost
+# re-export: in `fin.page_num` the name `fin` IS in globals and `page_num` is
+# a LOAD_ATTR. That is the same failure - a name that does not resolve at
+# runtime - and it is the one this repo is most exposed to, because cli
+# reaches both extractors only through their package facades.
+#
+# It went unnoticed for several commits: `fin.page_num` raised on every real
+# fin_report run while the L3 tests stubbed that function out and ab.py never
+# called it. Static, per-module, no folder needed. See docs/VERIFICATION.md.
+import ast
+
+attr_problems = 0
+for name in MODULES:
+    path = SRC.joinpath(*name.split(".")).with_suffix(".py")
+    if not path.exists():                       # package -> __init__.py
+        path = SRC.joinpath(*name.split("."), "__init__.py")
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+
+    # local alias -> the module object it is bound to, from this file's imports
+    aliases = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                if a.name in loaded:
+                    aliases[a.asname or a.name.split(".")[0]] = loaded[a.name]
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            for a in node.names:
+                sub = f"{node.module}.{a.name}"
+                if sub in loaded:
+                    aliases[a.asname or a.name] = loaded[sub]
+
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
+                and node.value.id in aliases
+                and not hasattr(aliases[node.value.id], node.attr)):
+            print(f"{name}:{node.lineno}: '{node.value.id}.{node.attr}' "
+                  f"is not provided by that module")
+            attr_problems += 1
+
+problems += attr_problems
+
+print(f"\n{len(loaded)}/{len(MODULES)} modules checked, {problems} missing-import reference(s) "
+      f"({attr_problems} of them module-attribute)")
 
 # `len(loaded) != len(MODULES)` is only a RELATIVE floor - it asks whether
 # everything discovered imported, not whether anything was discovered. MODULES

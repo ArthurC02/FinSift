@@ -98,3 +98,35 @@ def test_U6_the_same_folder_twice_is_deduplicated(harness):
     fin = folder("fin_q4", "fin_report")
     sheets = run(fin, fin, export="excel")
     assert [name for name, _ in sheets] == ["fin_q4"]
+
+
+def test_fin_report_rows_resolves_every_facade_name_it_uses(tmp_path):
+    """The user-facing extraction path, run for real rather than stubbed.
+
+    cli reaches both extractors through their package facades, so a name the
+    facade does not re-export fails ONLY at runtime and ONLY on a real folder.
+    `fin.page_num` was missing for several commits and no gate saw it: the
+    tests above stub run_fin_report out, tools/ab.py never calls this
+    function, and tools/undefined.py reads LOAD_GLOBAL - `fin.page_num` is a
+    LOAD_ATTR on a module that IS in globals.
+    """
+    from pathlib import Path
+
+    fixture = Path(__file__).parent / "fixtures" / "fixture"
+    kind, rows, excel_rows = cli.fin_report_rows(str(fixture), verbose=False)
+
+    assert kind == "ok"
+    assert rows and excel_rows
+    # (term, value, term_found, page, note, is_percent, is_scaled)
+    assert all(len(r) == 7 for r in excel_rows)
+
+
+def test_con_call_rows_resolves_every_facade_name_it_uses():
+    """Same for the con-call side - it calls fin.page_num too."""
+    from pathlib import Path
+
+    deck = Path(__file__).parent / "fixtures" / "deck"
+    rows, excel_rows = cli.con_call_rows(str(deck), str(cli._DEFAULT_CONFIG), False)
+
+    assert rows and excel_rows
+    assert all(len(r) == 7 for r in excel_rows)
