@@ -15,7 +15,7 @@
 | `src/runfinder.py` | 自動判斷資料夾是財報還是法說會，跑對應的擷取器並合併輸出 |
 | `src/npl_finder.py` | 抓金管會銀行局公開月報。**刻意完全獨立**，不匯入其他三個 |
 
-`src/core/` 是共用解析層（`text` / `numbers` / `tables`），單向依賴 `tables → text`，不回頭依賴上層。
+`src/core/` 是共用解析層（`text` / `numbers` / `tables` / `lookup`），單向依賴 `lookup → tables → text`，不回頭依賴上層。`lookup` 是資料夾層級的科目代碼／標籤查找，`compute_ratios` 與 `collect_summary_rows` 都坐在它上面。
 
 相依只有 `openpyxl` 與 `pytest`（無 `pyproject.toml`）。建環境、CLI 用法、旗標 → [docs/SETUP.md](docs/SETUP.md)
 
