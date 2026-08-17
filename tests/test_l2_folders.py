@@ -7,7 +7,7 @@ pipeline.
 import pytest
 
 import financialReports as fin
-from earningsCalls import decks
+import earningsCalls as ec
 from regulatorDatasets import disclosures
 from userInteractions import cli
 
@@ -315,7 +315,7 @@ def test_P1_every_derived_view_matches_its_profile():
         assert fin.BANK_NAME_ALIASES[name] == profile["aliases"]
         assert fin.SUMMARY_CODE_OVERRIDES[name] == profile["code_overrides"]
         assert fin.SUMMARY_CODE_OVERRIDES_FINSUM[name] == profile["code_overrides_finsum"]
-        assert decks.PRIMARY_BANK_ENTITIES[name] == profile["primary_entities"]
+        assert ec.PRIMARY_BANK_ENTITIES[name] == profile["primary_entities"]
         for term, codes in profile["composites"].items():
             assert fin.COMPOSITE_TERMS[term][name] == codes
 

@@ -8,7 +8,8 @@ wrong. §5.8 covers the remaining decision helpers plus two crash paths.
 import pytest
 
 import financialReports as fin
-from earningsCalls import decks
+import earningsCalls as ec
+from earningsCalls import matching
 # Stubs go on the module whose globals the consumer actually reads, not on the
 # fin facade that re-exports the name. compute_ratios and
 # collect_roa_roe live in ratios.py; collect_summary_rows lives in summary.py
@@ -187,21 +188,21 @@ def test_select_profitability_entry_prefers_an_entry_that_has_a_value():
 def test_entity_tier_falls_back_to_the_older_behaviour_when_bank_is_unknown():
     # primary_aliases=None means the bank couldn't be detected. Rather than
     # rejecting every named entity, any bank-named one is treated as primary.
-    assert decks.entity_tier("台北富邦銀行", None) == 2
-    assert decks.entity_tier("富邦金控", None) == 0
-    assert decks.entity_tier(None, None) == 1
-    assert decks.entity_tier("台北富邦銀行", ["中國信託"]) == 0
+    assert ec.entity_tier("台北富邦銀行", None) == 2
+    assert ec.entity_tier("富邦金控", None) == 0
+    assert ec.entity_tier(None, None) == 1
+    assert ec.entity_tier("台北富邦銀行", ["中國信託"]) == 0
 
 
 def test_rank_key_has_three_levels_and_ignores_period_recency():
     # strength -> tier -> quarterly_bonus. The period's AGE is deliberately not
     # part of the key, so two equally-strong matches from different periods tie
     # and the winner is decided by filename order downstream.
-    assert decks._rank_key(2, None) == (2, 1, 0)
-    assert decks._rank_key(3, None) > decks._rank_key(2, None)
-    assert decks._rank_key(2, None, "4Q25", prefer_quarterly=True) == (2, 1, 1)
-    assert decks._rank_key(2, None, "FY25", prefer_quarterly=True) == (2, 1, 0)
-    assert decks._rank_key(2, None, "4Q25") == decks._rank_key(2, None, "1Q20")
+    assert matching._rank_key(2, None) == (2, 1, 0)
+    assert matching._rank_key(3, None) > matching._rank_key(2, None)
+    assert matching._rank_key(2, None, "4Q25", prefer_quarterly=True) == (2, 1, 1)
+    assert matching._rank_key(2, None, "FY25", prefer_quarterly=True) == (2, 1, 0)
+    assert matching._rank_key(2, None, "4Q25") == matching._rank_key(2, None, "1Q20")
 
 
 def write_md(folder, name, *lines):

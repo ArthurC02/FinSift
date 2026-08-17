@@ -40,7 +40,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 import financialReports as fin
-from earningsCalls import decks
+import earningsCalls as ec
 
 # Windows consoles often default to cp1252, which can't print CJK output.
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
@@ -110,7 +110,7 @@ _FINSUM_MAX_FILES = 30
 # combined into ONE sheet instead of two, in this fixed business order:
 # every fin_report row first (financialReports' SUMMARY_LAYOUT order, ending
 # 活存比/CIR pulled after ROA/ROE per request), then every con_call row
-# (decks.RATIO_TERMS/BALANCE_TERMS/NPL_RATIO_TERM/NPL_COVERAGE_TERM).
+# (ec.RATIO_TERMS/BALANCE_TERMS/NPL_RATIO_TERM/NPL_COVERAGE_TERM).
 # Deliberately spelled out in full (not "fin terms then leftover con terms")
 # so this list stays the single source of truth for the merged sheet's row
 # order - merge_fin_and_con_rows falls back to source order only for a term
@@ -221,7 +221,7 @@ _EXCEL_SCALED_FORMAT = "#,##0.000"
 # display (its underlying value is a fraction, e.g. 0.654 for "65.40%") -
 # but every ratio value in this codebase is already stored AS a percent
 # number (65.4 meaning 65.4%, per format_pct() throughout financialReports/
-# decks.py). So the value is divided by 100 ONLY here, at the point of
+# ec.py). So the value is divided by 100 ONLY here, at the point of
 # writing an Excel-native percent cell, and nowhere else - the internal
 # "already-times-100" convention everywhere else is untouched.
 _EXCEL_PERCENT_FORMAT = "0.00%"
@@ -275,11 +275,11 @@ def lookup_concall_roa_roe(concall_folder, config_path, bank, verbose):
     financialReports) since only this module imports both packages, and
     financialReports importing earningsCalls would be circular: earningsCalls
     already imports FROM financialReports (entities, ratios, statements)."""
-    terms = decks.load_terms(config_path)
-    primary_aliases = decks.PRIMARY_BANK_ENTITIES.get(bank) if bank else None
-    roa = decks.find_term_value(concall_folder, terms["ROA(稅後年化)"], verbose=verbose,
+    terms = ec.load_terms(config_path)
+    primary_aliases = ec.PRIMARY_BANK_ENTITIES.get(bank) if bank else None
+    roa = ec.find_term_value(concall_folder, terms["ROA(稅後年化)"], verbose=verbose,
                               prefer_quarterly=True, primary_aliases=primary_aliases)
-    roe = decks.find_term_value(concall_folder, terms["ROE(稅後年化)"], verbose=verbose,
+    roe = ec.find_term_value(concall_folder, terms["ROE(稅後年化)"], verbose=verbose,
                               prefer_quarterly=True, primary_aliases=primary_aliases)
     return (roa[1] if roa else None), (roe[1] if roe else None)
 
@@ -350,8 +350,8 @@ def fin_report_rows(folder, verbose, concall_folder=None, config_path=_DEFAULT_C
 
 
 def con_call_rows(folder, config_path, verbose):
-    terms = decks.load_terms(config_path)
-    rows = decks.collect_con_call_summary(folder, terms, verbose=verbose)
+    terms = ec.load_terms(config_path)
+    rows = ec.collect_con_call_summary(folder, terms, verbose=verbose)
     excel_rows = []
     for r in rows:
         found = r.get("matched_label") or ""
@@ -394,12 +394,12 @@ def run_fin_report(folder, export, verbose, concall_folder=None, config_path=_DE
 def run_con_call(folder, config_path, export, verbose):
     rows, excel_rows = con_call_rows(folder, config_path, verbose)
     if export == "csv":
-        out_path = decks.write_summary_csv(folder, rows)
+        out_path = ec.write_summary_csv(folder, rows)
         print(f"  Wrote {len(rows)} row(s) to {out_path}")
         return None
     if export == "excel":
         return excel_rows
-    decks.print_summary_rows(rows)
+    ec.print_summary_rows(rows)
     return None
 
 
@@ -527,7 +527,7 @@ def main():
 # unambiguous; anything else falls through to the parser below untouched.
 _SUBCOMMANDS = {
     "acct": ("financialReports.statements", "per-statement / summary extraction from a filing"),
-    "call": ("earningsCalls.decks", "term extraction from an earnings-call deck"),
+    "call": ("earningsCalls.summary", "term extraction from an earnings-call deck"),
     "npl": ("regulatorDatasets.disclosures", "fetch the FSC 銀行局 monthly datasets"),
 }
 

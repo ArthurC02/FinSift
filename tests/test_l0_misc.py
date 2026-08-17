@@ -9,7 +9,7 @@ import pytest
 import financialReports as fin
 from regulatorDatasets import disclosures
 from userInteractions import cli
-from earningsCalls.decks import _add, _sub
+from earningsCalls import _add, _sub
 from core.numbers import annualize, format_maybe_pct, format_pct, format_value
 from core.tables import _is_table_divider, _split_row
 from core.text import despace_cjk, page_num

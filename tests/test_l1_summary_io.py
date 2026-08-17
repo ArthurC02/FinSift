@@ -12,7 +12,7 @@ correctly is a legitimate refactor and must not be blocked.
 import csv
 
 import financialReports as fin
-from earningsCalls import decks
+import earningsCalls as ec
 
 FIN_ROW = {
     "term": "資產總計", "value": 1234567, "is_percent": False,
@@ -47,7 +47,7 @@ def test_F6_acctfinder_print_summary_rows(capsys):
 
 def test_F6_callfinder_print_summary_rows(capsys):
     # Different schema: kind/individual/period_label, and no "=== summary ===".
-    decks.print_summary_rows([CALL_RATIO_ROW, CALL_VALUE_ROW])
+    ec.print_summary_rows([CALL_RATIO_ROW, CALL_VALUE_ROW])
     out = capsys.readouterr().out
     assert "ROA\t0.75%\tROA(稅後) @ 2Q25 (007)" in out
     assert "淨收益\t98,765\t淨收益合計 @ 2Q25 (007)" in out
@@ -64,7 +64,7 @@ def test_F6_acctfinder_write_summary_csv(tmp_path):
 
 
 def test_F6_callfinder_write_summary_csv(tmp_path):
-    out_path = decks.write_summary_csv(tmp_path, [CALL_RATIO_ROW, CALL_VALUE_ROW])
+    out_path = ec.write_summary_csv(tmp_path, [CALL_RATIO_ROW, CALL_VALUE_ROW])
     assert out_path.name == "con_call_summary_export.csv"
     with open(out_path, encoding="utf-8-sig", newline="") as f:
         rows = list(csv.reader(f))

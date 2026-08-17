@@ -10,8 +10,12 @@ actually CALLING each one, which is what this file does - all 9 lambdas across
 """
 import pytest
 
-from earningsCalls import decks
-from earningsCalls.decks import LOAN_RECOMPOSITION, TermSpec
+import earningsCalls as ec
+# Stubs go on the module the consumer reads, never the facade:
+# collect_con_call_summary lives here and binds find_term_value /
+# detect_con_call_* into its own namespace at import time.
+from earningsCalls import summary as ec_summary
+from earningsCalls import LOAN_RECOMPOSITION, TermSpec
 
 # 十億元, roughly the magnitudes real decks print.
 RAW = {
@@ -75,7 +79,7 @@ def test_cathay_has_no_recomposition():
 # Reconciliation check (BVT on _LOAN_RECONCILE_TOLERANCE, which is `>`, not `>=`)
 # --------------------------------------------------------------------------
 
-ALL_TERMS = decks.RATIO_TERMS + decks.BALANCE_TERMS + decks.HELPER_TERMS
+ALL_TERMS = ec.RATIO_TERMS + ec.BALANCE_TERMS + ec.HELPER_TERMS
 
 
 def run_summary(monkeypatch, tmp_path, values, bank="國泰", gov_names=None):
@@ -86,17 +90,16 @@ def run_summary(monkeypatch, tmp_path, values, bank="國泰", gov_names=None):
     the unmapped-entity state, so a test that needs a mapped entity passes
     `gov_names` and stubs disclosures's own network call instead.
     """
-    monkeypatch.setattr(decks, "_GOV_BANK_NAMES", gov_names or {})
-    monkeypatch.setattr(decks, "detect_con_call_quarter", lambda folder: 4)
-    monkeypatch.setattr(decks, "detect_con_call_year", lambda folder: 2025)
-    monkeypatch.setattr(
-        decks, "find_term_value",
+    monkeypatch.setattr(ec_summary, "_GOV_BANK_NAMES", gov_names or {})
+    monkeypatch.setattr(ec_summary, "detect_con_call_quarter", lambda folder: 4)
+    monkeypatch.setattr(ec_summary, "detect_con_call_year", lambda folder: 2025)
+    monkeypatch.setattr(ec_summary, "find_term_value",
         lambda folder, spec, **kw: (
             None if values.get(spec.name) is None
             else (spec.name, values[spec.name], "007_x.md", "4Q25", False, 1.0)),
     )
     terms = {name: TermSpec(name=name) for name in ALL_TERMS}
-    rows = decks.collect_con_call_summary(tmp_path, terms, bank=bank)
+    rows = ec.collect_con_call_summary(tmp_path, terms, bank=bank)
     return {r["term"]: r for r in rows}
 
 
@@ -195,4 +198,4 @@ def test_a_mapped_entity_whose_lookup_returns_nothing_is_not_called_unmapped(mon
 def test_every_gov_bank_name_key_is_a_real_entity():
     """A key that no longer matches a BANK_PROFILES name would silently never
     be looked up - _GOV_BANK_NAMES.get(bank) just returns None."""
-    assert set(decks._GOV_BANK_NAMES) <= set(decks.PRIMARY_BANK_ENTITIES)
+    assert set(ec._GOV_BANK_NAMES) <= set(ec.PRIMARY_BANK_ENTITIES)

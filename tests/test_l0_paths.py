@@ -11,7 +11,8 @@ from pathlib import Path
 import pytest
 
 import financialReports as fin
-from earningsCalls import decks
+import earningsCalls as ec
+from earningsCalls import summary as ec_summary
 from regulatorDatasets import disclosures
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -24,19 +25,23 @@ def test_PA1_industry_coding_files_exist():
 
 
 def _config_default(monkeypatch, tmp_path):
-    """The --config default is built inline inside decks.main(), so the
-    only way to read the real value is to run the parser. Stub load_terms as a
-    tripwire and let main() hand us the resolved path."""
+    """The --config default is built inline inside main(), so the only way to
+    read the real value is to run the parser. Stub load_terms as a tripwire and
+    let main() hand us the resolved path.
+
+    The stub goes on earningsCalls.summary, where main() lives and where it
+    reads load_terms from - patching the package facade instead leaves main()
+    calling the real function, which is a passing-looking test of nothing."""
     seen = {}
 
     def capture(config_path):
         seen["path"] = config_path
         raise SystemExit(0)
 
-    monkeypatch.setattr(decks, "load_terms", capture)
-    monkeypatch.setattr(sys, "argv", ["decks.py", "--folder", str(tmp_path)])
+    monkeypatch.setattr(ec_summary, "load_terms", capture)
+    monkeypatch.setattr(sys, "argv", ["ec.py", "--folder", str(tmp_path)])
     with pytest.raises(SystemExit):
-        decks.main()
+        ec.main()
     return seen["path"]
 
 

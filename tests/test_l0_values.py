@@ -49,7 +49,7 @@ def test_N8_magnitude_suffix_is_stripped_by_design_not_by_accident():
 
     A magnitude character in a cell is stripped rather than applied as a
     multiplier, so '2萬' reads as 2. Applying it would double-scale: units in
-    these documents are declared at TABLE level (decks.detect_unit_scale
+    these documents are declared at TABLE level (ec.detect_unit_scale
     reads '單位：新臺幣百萬元' from the header or the lines above the table)
     and every figure in that table is scaled once, there. A cell that restates
     its own unit - '1,234仟元' under a 仟元 header - is the common shape, and

@@ -11,7 +11,7 @@
 | 進入點 | 做什麼 |
 |---|---|
 | `src/financialReports/` | 財報擷取。**用法定科目代碼精確比對**，不是文字比對。套件本身就是門面：`import financialReports as fin` 之後 `fin.X` 一律有效，不必知道名字住在哪個檔 |
-| `src/earningsCalls/decks.py` | 法說會簡報擷取。文字比對，詞彙定義在 `data/con_call_terms.json` |
+| `src/earningsCalls/` | 法說會簡報擷取。文字比對，詞彙定義在 `data/con_call_terms.json`。套件即門面：`import earningsCalls as ec` |
 | `src/userInteractions/cli.py` | 自動判斷資料夾是財報還是法說會，跑對應的擷取器並合併輸出 |
 | `src/regulatorDatasets/disclosures.py` | 抓金管會銀行局公開月報。**刻意完全獨立**，不匯入其他三個 |
 
@@ -27,6 +27,16 @@ financialReports/__init__.py   ← 門面，對外只有這一個地址
 ```
 
 `entities` 是 `summary` 與 `ratios` 的共同地板：`compute_ratios` 需要 `SUMMARY_CODE_OVERRIDES`／`SUMMARY_LABEL_FALLBACKS`，而 `collect_summary_rows` 需要 `collect_roa_roe` —— 兩邊互相依賴，所以不能只切兩塊。
+
+法說會側同樣分層，**單向**：
+
+```
+earningsCalls/__init__.py   ← 門面
+    summary（策展摘要、放款重組、call 子命令）
+        └── matching（entity/單位/期別過濾、find_term_value）
+                ├── periods（哪一軸是期別、4Q25 / FY25 / 114年12月 怎麼讀）
+                └── terms（詞彙與 match_strength；TermSpec 是信任邊界）
+```
 
 `src/core/` 是共用解析層（`industry` / `lookup` / `tables` / `numbers` / `text`），單向依賴 `lookup → tables → text`，**不得匯入任何擷取器**。
 

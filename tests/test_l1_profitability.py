@@ -5,7 +5,7 @@ known-wrong behaviour: each one produces a plausible number rather than an
 error, so nothing downstream notices.
 """
 import financialReports as fin
-from earningsCalls.decks import _row_sections
+from earningsCalls import _row_sections
 
 
 def md(*lines):
