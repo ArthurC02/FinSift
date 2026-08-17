@@ -137,6 +137,17 @@ def main():
     total = sum(len(a) for a in available.values())
     print(f"{len(cited)} citation(s) -> {total} section(s) across {len(available)} document(s), "
           f"{len(broken)} broken, {len(unpointed)} unpointed module(s)")
+
+    # Assert the DENOMINATOR, not just the failure count. "0 broken out of 0
+    # examined" and "0 broken out of 73" are the same exit code, and this tool
+    # has silently scanned nothing twice: once when CITATION_RE's stem class
+    # excluded '-' so every topic-doc citation matched nothing, and once when
+    # the source list was .py-only and the new citations lived in .md. Both
+    # times it reported success. See docs/VERIFICATION.md §分母.
+    if not sources or not cited:
+        sys.exit(f"knowledge_links: scanned {len(sources)} source(s) and found "
+                 f"{len(cited)} citation(s). HARNESS FAILURE, not a result - "
+                 f"a check that examined nothing cannot report success.")
     return 1 if (broken or unpointed) else 0
 
 

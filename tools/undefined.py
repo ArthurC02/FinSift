@@ -106,4 +106,12 @@ for name, mod in sorted(loaded.items()):
                         problems += 1
 
 print(f"\n{len(loaded)}/{len(MODULES)} modules checked, {problems} missing-import reference(s)")
+
+# `len(loaded) != len(MODULES)` is only a RELATIVE floor - it asks whether
+# everything discovered imported, not whether anything was discovered. MODULES
+# comes from a glob, so a moved src/ makes it empty and "0/0 modules checked"
+# exits 0. Assert the absolute denominator too. See docs/VERIFICATION.md §分母.
+if not MODULES:
+    sys.exit(f"undefined.py: discovered 0 modules under {SRC}. HARNESS FAILURE, "
+             f"not a result - a check that examined nothing cannot report success.")
 sys.exit(1 if problems or len(loaded) != len(MODULES) else 0)

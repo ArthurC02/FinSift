@@ -106,6 +106,38 @@ for m in statements decks cli disclosures; do python src/$m.py --help; done
 
 ---
 
+## 1.6 分母：每個檢查器都要斷言「它檢查了幾個」
+
+**這條適用於這個 repo 裡每一個驗證工具，現有的與將來寫的。**
+
+`0 個失敗 / 0 個受檢` 與 `0 個失敗 / 73 個受檢`，**退出碼完全一樣**。所以只報失敗數的檢查器，在自己空跑時會回報成功。
+
+這不是假設，是實際發生過三次：
+
+| 事件 | 分母怎麼塌的 | 綠燈時實際檢查了 |
+|---|---|---|
+| `ab.py` 假綠燈 | `import earningsCalls` 對只有空 `__init__` 的樹也成功 | 0 段 |
+| `knowledge_links` 引用正規式 | 檔名 stem 用 `[\w.]`，不含 `-`，主題命名的文件全部匹配不到 | 0 個引用 |
+| `knowledge_links` 來源清單 | 只掃 `.py`，而新引用寫在 `AGENTS.md` | 13 個裡的 0 個 |
+
+**共同機制**：用 pattern 枚舉輸入（import 探測、字元類別、副檔名 glob），而這些東西**失敗時回空集合，不 raise**。`findall` 回 `[]`、`glob` 回 `[]`、空套件 import 成功——沒有一個會吵。
+
+所以每個工具收尾都要有一個**絕對下限**，而且它的訊息必須跟「找到問題」明確分開：
+
+```python
+if not sources or not cited:
+    sys.exit("... HARNESS FAILURE, not a result - "
+             "a check that examined nothing cannot report success.")
+```
+
+**相對下限不夠。** `undefined.py` 本來檢查 `len(loaded) != len(MODULES)`——那問的是「發現的都載入了嗎」，不是「有發現任何東西嗎」；`MODULES` 來自 glob，搬動 `src/` 就變成 `0/0` 然後 exit 0。
+
+現況：`ab.py` 用 `EXPECTED_TAGS` + `_MAX_EXPECTED_RAISES`，`knowledge_links.py` 與 `undefined.py` 各有非空斷言。**新增工具沿用同一個形狀，並用空目錄實測一次**——不要靠推論。
+
+> 這條規則本身就是這個機制的受害者。`ab.py` 的 `EXPECTED_TAGS` 是完全正確的藥，但它只寫成那個檔案裡的程式碼與註解，沒有寫進協定，所以下一個從零寫的工具沒有繼承到，同一個洞又出現兩次。**修法寫進協定，不是寫進第四個檔案。**
+
+---
+
 ## 2. 事先宣告預期差異
 
 **A/B 有差異不一定是錯的，但「事後才解釋」一定有問題。**
