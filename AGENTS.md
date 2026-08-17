@@ -54,6 +54,9 @@ earningsCalls/__init__.py   ← 門面
 4. **測試是 characterization（特徵化）測試**，期望值來自「現行實際行為」而非規格。修 bug 時，**改碼與翻轉斷言必須在同一支 commit**。
 5. **判不出來就拒絕，不要猜。** 這個 codebase 反覆出現的失效不是崩潰，是靜默的錯數字。判不出唯一機構就要求 `--bank`，判不出 layout 就要求 `--industry`，沒有依據就不要憑空補設定。
 
+> **看到 `→ docs/knowledge/...#章節` 就先去讀那一節，再動那段程式碼。**
+> 這個引用出現在門檻值、常數、函式 docstring 旁邊，代表「這裡有一個看起來合理但會產生錯數字的改法」。全部索引見下方[知識文件](#知識文件)。
+
 ## 驗證（每次改動）
 
 ```powershell
@@ -73,6 +76,7 @@ python tools\ab.py <改動前的 src> > before.txt   # V4 A/B 位元組比對
 
 | 想知道 | 讀 |
 |---|---|
+| **某個門檻值／退路／拒絕條件為什麼長這樣**（改碼前必讀） | [docs/knowledge/](docs/knowledge/) — 九份，索引見[知識文件](#知識文件) |
 | 建環境、CLI 用法與旗標 | [docs/SETUP.md](docs/SETUP.md) |
 | 業務領域：財報 vs 法說會、科目代碼、產業字典、機構清單 | [docs/DOMAIN.md](docs/DOMAIN.md) |
 | 架構：三個軸、模組地圖、資料流、每個關注點住哪裡 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
