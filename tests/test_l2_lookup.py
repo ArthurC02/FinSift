@@ -7,7 +7,7 @@ below is one column of the decision table.
 """
 import pytest
 
-from callfinder import TermSpec, detect_orientation, find_value_in_table
+from callfinder import TermSpec, detect_orientation, find_term_value, find_value_in_table
 
 
 def table(header, rows):
@@ -143,3 +143,22 @@ def test_entity_is_taken_from_header0_only_when_it_names_a_company(header0, expe
     # multi-entity appendix table, so entity is what tells them apart.
     t = table([header0, "4Q25"], [["企業放款", "100"]])
     assert find_value_in_table(t, spec())[4] == expected_entity
+
+
+def test_the_two_lookup_tuples_are_deliberately_in_opposite_orders(tmp_path):
+    """find_term_value wraps find_value_in_table and swaps the first two
+    elements: (value, label, ...) becomes (label, value, ...).
+
+    Both are 6-tuples and both are consumed positionally. Nothing else pins
+    find_term_value's real order - test_l2_loan_recomposition.py only ever
+    STUBS it, and that stub hardcodes label-first. So if the real function
+    were ever tidied up to match the callee it wraps, every stubbed test
+    would stay green while production silently swapped label and value.
+    """
+    (tmp_path / "001.md").write_text(
+        "| 項目 | 4Q25 |\n|---|---|\n| 企業放款 | 100 |\n", encoding="utf-8")
+    inner = find_value_in_table(COL_PERIOD, spec())
+    outer = find_term_value(tmp_path, spec())
+    assert inner[0] == 100 and inner[1] == "企業放款"        # value, label
+    assert outer[0] == "企業放款" and outer[1] == 100        # label, value
+    assert outer == ("企業放款", 100, "001.md", "4Q25", False, 1.0)

@@ -828,6 +828,11 @@ def find_term_value(folder, term_spec, verbose=False, prefer_quarterly=False, pr
     prefer_quarterly: see find_value_in_table/_pick_latest_period. Returns
     (matched_label, value, source_file, period_label, is_percent,
     unit_scale), or None if term_spec doesn't appear in any table.
+    NOTE the first two are the OPPOSITE way round from find_value_in_table,
+    which this wraps: that one returns (value, matched_label, ...). Both are
+    6-tuples, both are consumed positionally, and the two orders are pinned
+    side by side in test_l2_lookup.py - do not "fix" one to match the other
+    without changing every caller.
     unit_scale is the multiplier to 十億元 for the table the value came off
     (see detect_unit_scale); the raw as-printed value is returned unscaled
     so unitless callers can ignore it."""
@@ -1112,11 +1117,18 @@ def detect_con_call_year(folder):
 
 
 def collect_con_call_summary(folder, terms, verbose=False, bank=None):
-    """Build the curated con-call summary. Returns a list of row dicts:
+    """Build the curated con-call summary. Returns a list of row dicts with
+    TWO different shapes - write_summary_csv branches on `kind`, so anything
+    else reading these rows has to as well:
       - ratio terms: {term, kind: "ratio", individual,
                       period_label, matched_label, source_file}
+        (the value lives in `individual`, NOT in `value` - there is no
+        `value` key on a ratio row at all)
       - balance terms: {term, kind: "balance", value, period_label,
-                        matched_label, source_file}
+                        matched_label, source_file, is_percent, note}
+        `note` carries the loan-reconciliation warning (see
+        _LOAN_RECONCILE_TOLERANCE) and reaches the exported CSV, so it is
+        part of this contract rather than an internal detail.
     CIR is no longer produced here - see acctfinder.SUMMARY_LAYOUT (moved to
     the fin_report summary, computed directly from the same filing's
     營業費用/淨收益 with no crosscheck against this deck's figures - see

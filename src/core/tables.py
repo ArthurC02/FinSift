@@ -212,12 +212,16 @@ def percent_stride_map(lines):
 
 def group_rows_by_code(lines, code_dict):
     """lines: list[(page_num, line)], already restricted to one statement's
-    section. Returns a list of (code, page_num, cells) where `cells` is the
-    flattened list of every cell from the code's line and any immediately
-    following wrapped-continuation lines, plus the value-column stride of the
-    table the code's own row came from (see percent_stride_map - pass it to
-    nth_value so a table with no share column reads its periods consecutively
-    instead of skipping every second one).
+    section. Returns a list of (code, page_num, cells, stride):
+      - cells: the flattened list of every cell from the code's line and any
+        immediately following wrapped-continuation lines.
+      - stride: the value-column stride of the table the code's own row came
+        from (see percent_stride_map - pass it to nth_value so a table with
+        no share column reads its periods consecutively instead of skipping
+        every second one).
+    Pinned by test_l1_tables.py: this used to be documented as a 3-tuple with
+    the stride mentioned only in a trailing clause, which is how a shape claim
+    goes stale without anything going red.
 
     A continuation line is one whose leading cell is either blank or isn't
     code-shaped (see _looks_like_code - covers a wrapped account name's
