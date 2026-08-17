@@ -101,7 +101,7 @@ def build_code_index(folder, codes, label_fallbacks=None, period=1, verbose=Fals
     still-needed codes, so a later file is only scanned for whatever's
     still missing rather than re-parsed from scratch per code. Safe to
     consolidate this way because exact-code matching is unambiguous (a code
-    is a unique key, not a fuzzy text match like callfinder.py's term
+    is a unique key, not a fuzzy text match like decks.py's term
     matching - which genuinely needs to compare candidates across the whole
     folder before choosing the best one, and is deliberately NOT
     consolidated the same way). Output is identical to calling

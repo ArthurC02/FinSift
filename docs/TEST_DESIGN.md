@@ -7,7 +7,7 @@
 > 1. **§7 是已知執行期 bug 的登記簿** —— 動手前先查，避免重複發現或重複修。已修的項目標記為「已修」並保留原始症狀敘述。
 > 2. 各層案例的**設計理由**（為什麼用 ECT／BVT／決策表、為什麼某條案例存在）。
 >
-> 未落地的部分：§6.4 的 9 條 `npl_finder` 網路 stub 案例（L5）、以及 F1 traceability matrix。
+> 未落地的部分：§6.4 的 9 條 `disclosures` 網路 stub 案例（L5）、以及 F1 traceability matrix。
 > 驗證協定（四道驗證、mutation testing、red-before）已獨立成 [VERIFICATION.md](VERIFICATION.md)。
 
 ## 0. 這批測試要做的事
@@ -31,11 +31,11 @@
 | # | 失效模式 | 本專案的實例 | 抓得到的測試 |
 |---|---|---|---|
 | F1 | 符號搬走、import 沒跟上 | 任何跨模組呼叫 | 每個 public 符號至少被呼叫一次 |
-| F2 | **重複定義被合併成一個** | `acctfinder.py` 有兩份 `_looks_like_code` / `_CODE_SHAPE_RE`（L149/L476、L146/L479）；後者遮蔽前者，兩者行為**不同**（前者 `str(cell).strip()`，後者裸 `cell`） | §3.3 專門釘住「生效的是後者」 |
+| F2 | **重複定義被合併成一個** | `statements.py` 有兩份 `_looks_like_code` / `_CODE_SHAPE_RE`（L149/L476、L146/L479）；後者遮蔽前者，兩者行為**不同**（前者 `str(cell).strip()`，後者裸 `cell`） | §3.3 專門釘住「生效的是後者」 |
 | F3 | 巢狀在資料結構裡的函式失去 import | `LOAN_RECOMPOSITION` 的 9 個 lambda，AST 掃不到 | §5.5 逐 bank 觸發每一條公式 |
-| F4 | 跨模組限定名重繫結 | `runfinder` 的 `af.` / `cf.` 前綴 | §6 CLI 端到端 |
+| F4 | 跨模組限定名重繫結 | `cli` 的 `af.` / `cf.` 前綴 | §6 CLI 端到端 |
 | F5 | `Path(__file__).parent` 深度改變 | `data/*.xlsx`、`con_call_terms.json`、`npl_cache/` | §3.9 路徑解析 |
-| F6 | 同名不同實作被誤併 | `print_summary_rows`/`write_summary_csv` 在 acctfinder 與 callfinder 各一份，**列的形狀不同**；`page_num` 在 acctfinder 與 runfinder 各一份（相同）；`_contains_any` 兩份（相同） | §4.6 兩份分別餵各自形狀 |
+| F6 | 同名不同實作被誤併 | `print_summary_rows`/`write_summary_csv` 在 statements 與 decks 各一份，**列的形狀不同**；`page_num` 在 statements 與 cli 各一份（相同）；`_contains_any` 兩份（相同） | §4.6 兩份分別餵各自形狀 |
 
 F2、F3、F6 是這個 repo 特有的地雷：它們在單元測試通過、`--help` 正常、甚至 import 成功的情況下依然會出錯。
 
@@ -55,7 +55,7 @@ F2、F3、F6 是這個 repo 特有的地雷：它們在單元測試通過、`--h
 | **L1** | 表格結構：list 進 list 出 | 無／記憶體物件／`tmp_path` | 41 | ★★★ |
 | **L2** | 決策層：優先序、排名、分類 | 無（以 monkeypatch 注入依賴） | 68 | ★★ |
 | **L3/L4** | 檔案層、匯出與 CLI | fixture 目錄 + stdout | 34 | ★★ |
-| **L5** | 網路（`npl_finder` 抓取） | 需 stub | 9 | ☆ 最後 |
+| **L5** | 網路（`disclosures` 抓取） | 需 stub | 9 | ☆ 最後 |
 
 合計 **269** 條行為案例（另有 F1 traceability／static-presence meta-check，不計入此數）。本文以「可獨立命名的一個情境／參數列」算一條；同一情境內的多個 assertion 不重複計數。L0+L1 共 158 條不需真實申報書 fixture；少數案例使用記憶體 workbook 或 `tmp_path` 生成的最小 `.md`。
 
@@ -209,9 +209,9 @@ R4 以 S3（真正的「減：」）與 S4（只是文字含「減」的「減�
 | # | 檢查 | 預期 |
 |---|---|---|
 | PA1 | `INDUSTRY_CODING_FILES` 三個值 | 檔案存在 |
-| PA2 | `callfinder` 的 `--config` 預設值 | 檔案存在 |
+| PA2 | `decks` 的 `--config` 預設值 | 檔案存在 |
 | PA3 | 從**其他 cwd** 用絕對路徑呼叫 | 仍找得到 |
-| PA4 | `npl_finder._CACHE_DIR` | 解析到 **repo 根目錄**的 `npl_cache/`，不是 `src/npl_cache/` |
+| PA4 | `disclosures._CACHE_DIR` | 解析到 **repo 根目錄**的 `npl_cache/`，不是 `src/npl_cache/` |
 
 PA3 是唯一能抓到 `parent.parent` 深度改錯的測試。PA4 單獨列出是因為它的正確答案是「一個尚未存在的目錄」——不能用「檔案存在」當 oracle，只能斷言解析出的路徑字串。
 
@@ -286,7 +286,7 @@ start 找不到 → **`None`**（呼叫端據此決定跳過或全檔掃描，�
 
 ### 4.6 兩份同名函式分別驗證（F6，4 條）
 
-`acctfinder.print_summary_rows` 吃 `{term, value, is_percent, ...}`；`callfinder.print_summary_rows` 吃 `{term, kind, individual/value, ...}`。各餵各自的**合法形狀**一次，斷言完整的關鍵輸出欄位與 NOTE 行；`write_summary_csv` 同理，並斷言檔名分別為 `summary_export.csv`、`con_call_summary_export.csv`，以及各自的 CSV header。
+`statements.print_summary_rows` 吃 `{term, value, is_percent, ...}`；`decks.print_summary_rows` 吃 `{term, kind, individual/value, ...}`。各餵各自的**合法形狀**一次，斷言完整的關鍵輸出欄位與 NOTE 行；`write_summary_csv` 同理，並斷言檔名分別為 `summary_export.csv`、`con_call_summary_export.csv`，以及各自的 CSV header。
 
 不要把「把對方的列形狀餵進去必須壞」當成 oracle：若重構後的共用 dispatcher 能正確支援兩種 schema，這仍是行為相容的實作，不應被安全網阻止。F6 要保護的是兩個公開入口的合法輸出契約，不是內部必須各自維持一份函式本體。
 
@@ -377,7 +377,7 @@ B10／B11 補上另一個容易漏的事實：**兩個 note 的判斷都在 `if/
 
 BVT（4 條）：`code_hits` = 4／5／6；檔數 = 30／31。
 
-**額外 1 條**：把 `.md` 放進**子資料夾**。`classify_folder` 用 `glob("*.md")`（非遞迴），而 `detect_bank` / `find_code_value` / `collect_statement_rows` / `find_term_value` 全用 `rglob`。同一個資料夾，runfinder 分類為 `None`（跳過），acctfinder 直接跑卻完全正常。釘住此不一致。
+**額外 1 條**：把 `.md` 放進**子資料夾**。`classify_folder` 用 `glob("*.md")`（非遞迴），而 `detect_bank` / `find_code_value` / `collect_statement_rows` / `find_term_value` 全用 `rglob`。同一個資料夾，cli 分類為 `None`（跳過），statements 直接跑卻完全正常。釘住此不一致。
 
 ### 5.5 `LOAN_RECOMPOSITION` — 逐 bank 逐公式（F3，12 條）
 
@@ -465,9 +465,9 @@ Q5 值得標注：docstring 說「絕不回傳更晚的月份」，但當請求�
 | E6 | 一個資料夾，銀行名只出現在**第 2 個** `.md`（第 1 檔沒有） | `detect_bank` 回 **`None`**（只讀 `paths[0]`），但 `detect_industry_category` 在同一資料夾回**成功**（讀前 5 檔）← PINNED BUG #22 |
 | E7 | `load_terms` 讀取 `{"壞設定":{"type":"composite","components":[{"terms":["x"]}]}}`（component 缺 `weight`） | `Component(**c)` 的裸 **`TypeError`** 直接逸出，沒有檔名／term／schema 說明 ← PINNED BUG #23 |
 
-E6 的後果：`runfinder` 會印「Couldn't auto-detect the bank」並整個跳過該資料夾，而 `acctfinder <folder> balance_sheet` 對同一資料夾卻完全正常——因為後者只需要產業別，不需要銀行別。
+E6 的後果：`cli` 會印「Couldn't auto-detect the bank」並整個跳過該資料夾，而 `statements <folder> balance_sheet` 對同一資料夾卻完全正常——因為後者只需要產業別，不需要銀行別。
 
-### 6.2 `runfinder` 配對 — Decision Table（6 條）★
+### 6.2 `cli` 配對 — Decision Table（6 條）★
 
 | 條件 | U1 | U2 | U3 | U4 | U5 | U6 |
 |---|---|---|---|---|---|---|
@@ -495,7 +495,7 @@ L3/L4 需要一組合成 `.md`：
 
 合成資料即可，**不要放真實申報書**（體積、著作權，且真實檔案更新會讓測試漂移）。
 
-### 6.4 `npl_finder`（L5，9 條）
+### 6.4 `disclosures`（L5，9 條）
 
 `_fetch_url` 必須 stub。純函式部分（`resolve_period` §5.6、`_parse_number`、`_find_header_column`、`roc_year` 等）不需網路，已列在 L0/L2。需要 stub 的只有：`_list_period_links` 的 href 解析（3 條：正常、PDF 雙胞胎不搶位、無匹配時 `RuntimeError`）、`_xlsx_from_zip`（2 條）、`_extract_columns_by_bank`（3 條：正常、堆疊 3 列表頭、找不到欄位丟 `RuntimeError`）、SSL 錯誤轉譯（1 條）。
 
@@ -511,7 +511,7 @@ L3/L4 需要一組合成 `.md`：
 |---|---|---|---|
 | 1 | `nth_value` | 無 % 欄的表，`period=2` 恆為 `None`，連帶使 ROA/ROE cross-check 靜默消失 | **高** |
 | 2 | `nth_value` | `period=0` 回最舊期間、`period=-1` 回第一個值、單值時 `IndexError` | **高** |
-| 3 | `runfinder.main` | fin 偵測不到銀行時，配對的 con-call 資料整批無聲丟失 | **高** |
+| 3 | `cli.main` | fin 偵測不到銀行時，配對的 con-call 資料整批無聲丟失 | **高** |
 | 4 | `collect_summary_rows` CIR | label-fallback 取到 `value=None` 時 `abs(None)` → `TypeError`（label 通道不像 code 通道會跳過 None） | **高** |
 | 5 | `merge_fin_and_con_rows` | 兩側同名 term 會輸出兩次 | 中 |
 | 6 | `collect_roa_roe` | 分歧檢查分子未取絕對值，負值（虧損季）漏報 | 中 |
@@ -525,13 +525,13 @@ L3/L4 需要一組合成 `.md`：
 | 14 | `extract_transposed_entity_tables` | 直接用未錨定的 `parse_single_date`，期間區間被誤標為起始日（layout 2 未套用 `parse_period_header_date` 的修正） | 低 |
 | 15 | `extract_metrics` | 全形破折不佔位，導致 5 個指標整排位移 | 低 |
 | 16 | `resolve_period` | 請求早於所有資料時回傳**更晚**的月份，與 docstring 相反 | 低 |
-| 17 | `main`（acctfinder） | `equity_statement` 丟裸 traceback 而非友善訊息 | 低 |
+| 17 | `main`（statements） | `equity_statement` 丟裸 traceback 而非友善訊息 | 低 |
 | 18 | `_ENTITY_ROW_RE` | 「存放銀行同業」等一般科目被當成 entity 列 | 低 |
 | 19 | `_looks_like_code` / `_CODE_SHAPE_RE` | 各有兩份定義，後者遮蔽前者且行為不同 | **重構風險** |
-| 24 | `acctfinder._ENTITY_HEADING_NAME_RE` vs `callfinder._ENTITY_NAME_RE` | 兩份幾乎相同的「公司名關鍵字」regex，各自一份（修 #9 時新增，因為 `acctfinder` 不能反向匯入 `callfinder`）。正確的家是 `core/text.py`，但搬移屬重構、不能混進修 bug 的 commit | **重構風險**（F6 型） |
-| 20 | 死碼 | **Phase 6 已處理。** 已刪除：`term_matches`、`RATIO_CODES`（連同其已過時的區段 banner）、`find_statement_rows`，以及 `callfinder` 三個從未被呼叫的匯入（`_is_table_divider`、`_split_row`、`format_value`）。**保留**：`fetch_latest_overdue_loans`、`DISCLOSURE_PAGE_URL` —— 兩者明寫是 backwards-compatible alias，repo 內零引用但無法從這裡確認外部腳本是否依賴，已依 REFACTOR_PLAN §8 的既定規則加上 `# ponytail:` 註解保留，待你確認後可刪 | 已處理 |
+| 24 | `statements._ENTITY_HEADING_NAME_RE` vs `decks._ENTITY_NAME_RE` | 兩份幾乎相同的「公司名關鍵字」regex，各自一份（修 #9 時新增，因為 `statements` 不能反向匯入 `decks`）。正確的家是 `core/text.py`，但搬移屬重構、不能混進修 bug 的 commit | **重構風險**（F6 型） |
+| 20 | 死碼 | **Phase 6 已處理。** 已刪除：`term_matches`、`RATIO_CODES`（連同其已過時的區段 banner）、`find_statement_rows`，以及 `decks` 三個從未被呼叫的匯入（`_is_table_divider`、`_split_row`、`format_value`）。**保留**：`fetch_latest_overdue_loans`、`DISCLOSURE_PAGE_URL` —— 兩者明寫是 backwards-compatible alias，repo 內零引用但無法從這裡確認外部腳本是否依賴，已依 REFACTOR_PLAN §8 的既定規則加上 `# ponytail:` 註解保留，待你確認後可刪 | 已處理 |
 | 21 | `compute_ratios` | 兩期資產皆為 0 時丟 `ZeroDivisionError`；它非 `RuntimeError` 子類，`collect_roa_roe` 的 `except RuntimeError` 攔不住，整個 run 崩潰而非降級 | **高** |
-| 22 | `detect_bank` vs `detect_industry_category` | 前者只讀第 1 檔、後者讀前 5 檔。銀行名不在封面時，產業偵測成功但銀行偵測失敗，runfinder 整個資料夾被跳過 | 中 |
+| 22 | `detect_bank` vs `detect_industry_category` | 前者只讀第 1 檔、後者讀前 5 檔。銀行名不在封面時，產業偵測成功但銀行偵測失敗，cli 整個資料夾被跳過 | 中 |
 | 23 | `load_terms` | 完全無 schema 驗證：一個空字串 alias 讓該 term 命中所有列（MS6，strength 2）；`Component(**c)` 欄位錯誤只會丟裸 `TypeError`（E7） | 低（設定面） |
 | 25 | `detect_bank` | 依 `BANK_NAME_ALIASES` 順序**首次命中就贏**。偵測別名必須是短名（法說會封面寫「玉山金控」，不寫登記名稱），而台灣銀行短名大量互為子字串，且財報在關係人／同業拆款附註提到同業是常態。命中兩家時不會降級成 N/A，而是**靜默套用錯的一家**的 `COMPOSITE_TERMS` 與 `SUMMARY_CODE_OVERRIDES`，產出整組看似正常的錯數字。實測：玉山財報第二頁含「與國泰世華商業銀行之拆款」→ 判成 `國泰`。**已修**（`bank_candidates` 收集全部命中，唯一時才解析；曖昧走既有的「偵測不到」路徑） | **高**（規模相依，4 家時罕見、近 40 家時必然） |
 | 26 | `SUMMARY_LAYOUT` / `collect_summary_rows` | summary 模式**不載入任何產業編碼字典**，SUMMARY_LAYOUT 的 code 是 raw 比對，因此 code 不帶產業資訊。同一數字在不同 scheme 意義不同（`INDUSTRY_CODING_FILES` 註解自己就記了 58200：金融業＝呆帳提存，保險業＝保險成本線）。套到非銀行 scheme 不會失敗，而是**把正確解析的數字掛上錯誤的標準化 term**。實測：國泰人壽財報 → 產業正確判為保險業卻完全未被使用，`保險成本` 以 term `呆帳提存(收回)` 輸出並被 `apply_cost_sign` 翻號；`matched_label` 仍保留原標籤，但 CSV/Excel 與 `_MERGED_TERM_ORDER` 都以 `term` 為鍵。**已修**（`INDUSTRY_SUMMARY_LAYOUTS` 產業化，無 layout 的產業一律拒絕，不預設） | **高** |
@@ -544,13 +544,13 @@ L3/L4 需要一組合成 `.md`：
 
 ### 機構軸（`BANK_PROFILES`）
 
-以機構為鍵的設定原本散在**六個地方**：`BANKS`、`BANK_NAME_ALIASES`、`SUMMARY_CODE_OVERRIDES`、`SUMMARY_CODE_OVERRIDES_FINSUM`、`COMPOSITE_TERMS`（`acctfinder`）、`PRIMARY_BANK_ENTITIES`（`callfinder`）。新增一家要改六處，而**沒有任何東西檢查是否都改到**；漏掉 `composites` 只會讓那家的摘要少一列 N/A，與「該機構真的沒揭露」完全無法區分。
+以機構為鍵的設定原本散在**六個地方**：`BANKS`、`BANK_NAME_ALIASES`、`SUMMARY_CODE_OVERRIDES`、`SUMMARY_CODE_OVERRIDES_FINSUM`、`COMPOSITE_TERMS`（`statements`）、`PRIMARY_BANK_ENTITIES`（`decks`）。新增一家要改六處，而**沒有任何東西檢查是否都改到**；漏掉 `composites` 只會讓那家的摘要少一列 N/A，與「該機構真的沒揭露」完全無法區分。
 
 現已收攏成單一 `BANK_PROFILES`，六個舊名稱全部改為由它推導（外部行為不變），並加上 `_validate_profiles()` 在 **import 時**拒絕不完整的 profile。
 
 `industries` 欄位是關鍵：它讓 #25 的碰撞在**身分層**就不成立，而不只是靠 #26 的 layout 守衛事後攔截。`國泰人壽` 的財報產業判為保險業，而沒有任何 profile 把保險業列入 `industries`，因此 `國泰` 這個別名根本不參與比對。產業判不出來時（法說會 deck 從不載法定全名）則不收斂，維持全體候選 —— 否則法說會端偵測會整個失效。
 
-**刻意留在原地**：`callfinder.LOAN_RECOMPOSITION`。它是**邏輯不是資料**（巢狀在 dict literal 裡的 lambda，正是 F3 失效類型），搬移風險與其他五張表不同級；而且它自身安全降級 —— 沒有條目的機構就是不做重組，這是正確預設（`國泰` 本來就沒有），不像缺 `composites`／`aliases` 會產生錯的或消失的數字。因此完整性檢查對它沒有東西可強制。
+**刻意留在原地**：`decks.LOAN_RECOMPOSITION`。它是**邏輯不是資料**（巢狀在 dict literal 裡的 lambda，正是 F3 失效類型），搬移風險與其他五張表不同級；而且它自身安全降級 —— 沒有條目的機構就是不做重組，這是正確預設（`國泰` 本來就沒有），不像缺 `composites`／`aliases` 會產生錯的或消失的數字。因此完整性檢查對它沒有東西可強制。
 
 ---
 

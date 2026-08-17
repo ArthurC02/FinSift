@@ -7,7 +7,7 @@ below is one column of the decision table.
 """
 import pytest
 
-from earningsCalls.callfinder import TermSpec, detect_orientation, find_term_value, find_value_in_table
+from earningsCalls.decks import TermSpec, detect_orientation, find_term_value, find_value_in_table
 
 
 def table(header, rows):

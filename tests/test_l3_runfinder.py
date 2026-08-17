@@ -1,4 +1,4 @@
-"""L3 tests - TEST_DESIGN §6.2, runfinder's folder pairing (6 cases).
+"""L3 tests - TEST_DESIGN §6.2, cli's folder pairing (6 cases).
 
 main() is driven with classify_folder and both run_* helpers stubbed, so what
 is under test is the pairing and sheet-assembly logic rather than extraction.
@@ -9,7 +9,7 @@ import sys
 
 import pytest
 
-from userInteractions import runfinder as rf
+from userInteractions import cli
 
 
 def rows(tag):
@@ -22,25 +22,25 @@ def harness(monkeypatch, tmp_path):
     leaves the sheets that would have been written in state["sheets"]."""
     state = {"sheets": None, "no_bank": False, "kinds": {}}
 
-    monkeypatch.setattr(rf, "load_all_codes", lambda: {})
-    monkeypatch.setattr(rf, "classify_folder",
+    monkeypatch.setattr(cli, "load_all_codes", lambda: {})
+    monkeypatch.setattr(cli, "classify_folder",
                         lambda folder, codes: (state["kinds"][str(folder)], 6, 1))
-    monkeypatch.setattr(rf, "run_fin_report",
+    monkeypatch.setattr(cli, "run_fin_report",
                         lambda folder, export, verbose, **kw:
                             None if state["no_bank"] else (rows("fin") if export == "excel" else None))
-    monkeypatch.setattr(rf, "run_con_call",
+    monkeypatch.setattr(cli, "run_con_call",
                         lambda folder, config_path, export, verbose:
                             rows("con") if export == "excel" else None)
-    monkeypatch.setattr(rf, "write_excel_merged",
+    monkeypatch.setattr(cli, "write_excel_merged",
                         lambda sheets, out_path: state.__setitem__("sheets", sheets))
-    monkeypatch.setattr(rf, "open_file", lambda path: None)
+    monkeypatch.setattr(cli, "open_file", lambda path: None)
 
     def run(*folders, export=None):
-        argv = ["runfinder.py", *[str(f) for f in folders]]
+        argv = ["cli.py", *[str(f) for f in folders]]
         if export:
             argv += ["--export", export]
         monkeypatch.setattr(sys, "argv", argv)
-        rf.main()
+        cli.main()
         return state["sheets"]
 
     def folder(name, kind):

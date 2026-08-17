@@ -7,7 +7,7 @@ reason onto the row's own `note`, and pin that it survives into the export.
 """
 import csv
 
-from financialReports import acctfinder as af
+import financialReports as fin
 
 # Real entity name so detect_industry_category resolves, and nothing else:
 # every code lookup then legitimately comes up empty.
@@ -16,7 +16,7 @@ EMPTY_FILING = "# 玉山商業銀行股份有限公司\n"
 
 def summary(tmp_path, bank="玉山"):
     (tmp_path / "001.md").write_text(EMPTY_FILING, encoding="utf-8")
-    rows = af.collect_summary_rows(tmp_path, bank, industry="金融業")
+    rows = fin.collect_summary_rows(tmp_path, bank, industry="金融業")
     return rows, {r["term"]: r for r in rows}
 
 
@@ -51,7 +51,7 @@ def test_a_bank_with_no_composite_formula_says_so(tmp_path):
 def test_the_reason_reaches_the_exported_csv(tmp_path):
     """The whole point of putting it on the row rather than only on stdout."""
     rows, _ = summary(tmp_path)
-    out = af.write_summary_csv(tmp_path, rows)
+    out = fin.write_summary_csv(tmp_path, rows)
     with open(out, encoding="utf-8-sig") as f:
         exported = {r["term"]: r["note"] for r in csv.DictReader(f)}
     assert exported["總資產"] == "code 10000 (總資產) not found in any file"
@@ -77,7 +77,7 @@ NO_OPEX_TOTAL = EMPTY_FILING + """
 
 def opex_row(tmp_path, text):
     (tmp_path / "001.md").write_text(text, encoding="utf-8")
-    rows = af.collect_summary_rows(tmp_path, "玉山", industry="金融業")
+    rows = fin.collect_summary_rows(tmp_path, "玉山", industry="金融業")
     return {r["term"]: r for r in rows}
 
 
@@ -127,6 +127,6 @@ def test_a_resolved_row_still_has_an_empty_note(tmp_path):
     (tmp_path / "001.md").write_text(
         EMPTY_FILING + "| 代碼 | 科目 | 金額 |\n|---|---|---|\n| 10000 | 資產總計 | 100 |\n",
         encoding="utf-8")
-    by_term = {r["term"]: r for r in af.collect_summary_rows(tmp_path, "玉山", industry="金融業")}
+    by_term = {r["term"]: r for r in fin.collect_summary_rows(tmp_path, "玉山", industry="金融業")}
     assert by_term["總資產"]["value"] == 100
     assert by_term["總資產"]["note"] == ""

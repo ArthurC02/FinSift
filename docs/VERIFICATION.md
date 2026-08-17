@@ -31,7 +31,7 @@ python tools/undefined.py
 
 預期輸出 `8/8 modules checked, 0 missing-import reference(s)`。
 
-它做的事比 lint 多一件：**遞迴進 dict / list / tuple 找巢狀 lambda**。`callfinder.LOAN_RECOMPOSITION` 是九個 lambda 住在 dict literal 裡，AST 的 name-keyed 掃描看不到它們，而它們是最容易在搬移中失去 import 的東西。
+它做的事比 lint 多一件：**遞迴進 dict / list / tuple 找巢狀 lambda**。`decks.LOAN_RECOMPOSITION` 是九個 lambda 住在 dict literal 裡，AST 的 name-keyed 掃描看不到它們，而它們是最容易在搬移中失去 import 的東西。
 
 實作上用 `dis` 過濾 `LOAD_GLOBAL` 而非讀 `co_names`，因為後者混入屬性名，會把 `af.collect_summary_rows` 誤報成缺漏。
 
@@ -74,11 +74,11 @@ git worktree remove ../wt_head --force
 ### 加碼：四個進入點
 
 ```powershell
-foreach ($m in 'acctfinder','callfinder','runfinder','npl_finder') { python "src\$m.py" --help }
+foreach ($m in 'statements','decks','cli','disclosures') { python "src\$m.py" --help }
 ```
 
 ```bash
-for m in acctfinder callfinder runfinder npl_finder; do python src/$m.py --help; done
+for m in statements decks cli disclosures; do python src/$m.py --help; done
 ```
 
 抓得到 import 期就爆炸的錯誤，包括 `_validate_profiles` 在 import 時拒絕的不完整 profile。
@@ -96,7 +96,7 @@ for m in acctfinder callfinder runfinder npl_finder; do python src/$m.py --help;
 | 純重構／搬移 | 四道驗證全過，**A/B 應為 byte-identical** | 無 |
 | 加機構／產業／詞彙 | 依 [EXTENDING.md](EXTENDING.md) 完成設定與合成 fixture | **真實文件必須人工核對** |
 | 新版型、公式、門檻 | 可先實作 parser／測試並列出假設 | **必須有真實 `.md`、原始報表或業務方確認** |
-| `npl_finder` 網路行為 | stub 後的解析與錯誤轉譯測試 | 真站可用性、憑證、網站改版 |
+| `disclosures` 網路行為 | stub 後的解析與錯誤轉譯測試 | 真站可用性、憑證、網站改版 |
 
 測試主體是**合成資料的回歸網**：足以保護已知行為與重構，**不足以證明沒見過的財報格式正確**（見 §7）。
 
@@ -121,13 +121,13 @@ for m in acctfinder callfinder runfinder npl_finder; do python src/$m.py --help;
 **A/B 與任何自動化都不准真的連 `banking.gov.tw`。**
 
 ```python
-import npl_finder
-npl_finder._fetch_url = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("network stubbed"))
+import disclosures
+disclosures._fetch_url = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("network stubbed"))
 ```
 
 先前的間歇性 SSL 失敗被誤判為「行為差異」，浪費了一輪診斷。若任何一邊真的連上外網，**視為 harness 設定失敗，不以重跑判定結果**。
 
-同時：**不要為了讓測試過而停用 `npl_finder` 的 SSL 驗證**。原始碼寫明不停用是刻意的（MITM 風險）。
+同時：**不要為了讓測試過而停用 `disclosures` 的 SSL 驗證**。原始碼寫明不停用是刻意的（MITM 風險）。
 
 ---
 

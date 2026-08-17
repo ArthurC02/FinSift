@@ -86,7 +86,7 @@ SUMMARY_CODE_DERIVATIONS = {
 # Everything keyed by a reporting entity lives here. It used to live in five
 # separate tables (BANKS, BANK_NAME_ALIASES, SUMMARY_CODE_OVERRIDES,
 # SUMMARY_CODE_OVERRIDES_FINSUM, COMPOSITE_TERMS) plus
-# callfinder.PRIMARY_BANK_ENTITIES - six edits to add one entity, with nothing
+# decks.PRIMARY_BANK_ENTITIES - six edits to add one entity, with nothing
 # checking they all happened. Every one of those names still exists, derived
 # below; only their source moved. _validate_profiles() then makes an
 # incomplete entity an import-time error instead of a silent N/A at run time.
@@ -113,7 +113,7 @@ SUMMARY_CODE_DERIVATIONS = {
 # primary_entities - the PRIMARY bank subsidiary each earnings-call deck is
 #   about. A financial-holding deck also reports OTHER bank subsidiaries
 #   (富邦華一銀行 in RMB, 富邦銀行(香港) in HKD, ...) whose tables use
-#   identical row labels (存放比, 總放款, 營業費用) - callfinder's
+#   identical row labels (存放比, 總放款, 營業費用) - decks's
 #   _BANK_LABEL_HINT alone can't tell them apart, since every one of them
 #   contains "銀行". Matching a figure from the wrong subsidiary is worse than
 #   reporting nothing: in a real 富邦 deck it produced 存放比 72.17% and
@@ -345,7 +345,7 @@ def bank_candidates(folder, industry=None):
     Reads the same first-5 window detect_industry_category does. Reading only
     paths[0] meant a filing whose cover page didn't carry the bank's name -
     the exact case detect_industry_category was widened to 5 files for -
-    detected its industry fine but failed on the bank, and runfinder then
+    detected its industry fine but failed on the bank, and cli then
     skipped the whole folder."""
     paths = sorted(Path(folder).rglob("*.md"))[:5]
     if not paths:
@@ -378,7 +378,7 @@ def detect_bank(folder):
     plausible-looking wrong numbers.
 
     Ambiguity is therefore refused rather than guessed. Callers already have
-    a path for "couldn't detect" (acctfinder asks for --bank, runfinder skips
+    a path for "couldn't detect" (statements asks for --bank, cli skips
     the folder and says so), so this needs no new control flow - only a
     message that distinguishes the two cases, which is what bank_candidates
     is exposed for."""

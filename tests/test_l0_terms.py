@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from financialReports import acctfinder
-from earningsCalls import callfinder
-from earningsCalls.callfinder import Component, TermSpec, match_strength
+import financialReports as fin
+from earningsCalls import decks
+from earningsCalls.decks import Component, TermSpec, match_strength
 
 
 def exact(aliases, negative=None):
@@ -71,7 +71,7 @@ def test_the_bundled_configs_still_load():
     # while still looking correct.
     bundled = Path(__file__).resolve().parent.parent / "data" / "con_call_terms.json"
     assert bundled.is_file(), bundled
-    assert len(callfinder.load_terms(bundled)) > 1
+    assert len(decks.load_terms(bundled)) > 1
 
 
 def test_every_bundled_data_path_a_module_computes_actually_resolves():
@@ -79,11 +79,11 @@ def test_every_bundled_data_path_a_module_computes_actually_resolves():
     level short after the package move, and only this one had a test. A path
     that resolves to nowhere fails at the first open, not in parsing, so it is
     worth pinning all of them in one place."""
-    from earningsCalls import callfinder as cf
-    from userInteractions import runfinder as rf
-    assert Path(rf._DEFAULT_CONFIG).is_file(), rf._DEFAULT_CONFIG
-    assert (cf._REPO_ROOT / "data" / "con_call_terms.json").is_file()
-    for industry, path in acctfinder.INDUSTRY_CODING_FILES.items():
+    from earningsCalls import decks
+    from userInteractions import cli
+    assert Path(cli._DEFAULT_CONFIG).is_file(), cli._DEFAULT_CONFIG
+    assert (decks._REPO_ROOT / "data" / "con_call_terms.json").is_file()
+    for industry, path in fin.INDUSTRY_CODING_FILES.items():
         assert Path(path).is_file(), f"{industry}: {path}"
 
 
@@ -94,7 +94,7 @@ def test_E7_a_malformed_component_names_the_file_and_the_term(tmp_path):
     path = write_config(tmp_path, {"壞設定": {"type": "composite",
                                                "components": [{"terms": ["x"]}]}})
     with pytest.raises(ValueError) as exc:
-        callfinder.load_terms(path)
+        decks.load_terms(path)
     message = str(exc.value)
     assert "壞設定" in message and str(path) in message and "weight" in message
 
@@ -103,7 +103,7 @@ def test_an_unexpected_component_field_is_reported_too(tmp_path):
     path = write_config(tmp_path, {"t": {"type": "composite",
                                           "components": [{"terms": ["x"], "weight": 1, "wieght": 2}]}})
     with pytest.raises(ValueError, match="wieght"):
-        callfinder.load_terms(path)
+        decks.load_terms(path)
 
 
 def test_a_blank_alias_is_rejected_at_load_time(tmp_path):
@@ -114,11 +114,11 @@ def test_a_blank_alias_is_rejected_at_load_time(tmp_path):
     stops one arriving from a config file."""
     path = write_config(tmp_path, {"t": {"aliases": ["淨收益", ""]}})
     with pytest.raises(ValueError, match="aliases"):
-        callfinder.load_terms(path)
+        decks.load_terms(path)
 
 
 def test_a_blank_negative_term_is_rejected_too(tmp_path):
     # The mirror image: a blank negative term vetoes every row instead.
     path = write_config(tmp_path, {"t": {"aliases": ["淨收益"], "negative_terms": ["  "]}})
     with pytest.raises(ValueError, match="negative_terms"):
-        callfinder.load_terms(path)
+        decks.load_terms(path)

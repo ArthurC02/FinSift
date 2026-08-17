@@ -260,7 +260,7 @@ def parse_period_header_date(cell):
 # _ENTITY_HEADING_RE matches any numbered line at all - so a 前言 on page one
 # used to make every layout-3 table in the file look like layout 2's, and
 # layout 3 skipped the lot.
-# Duplicates callfinder._ENTITY_NAME_RE's vocabulary. Both belong in core/,
+# Duplicates decks._ENTITY_NAME_RE's vocabulary. Both belong in core/,
 # but moving them is a refactor and this is a bug-fix commit - see the note
 # added to TEST_DESIGN §7.
 _ENTITY_HEADING_NAME_RE = re.compile(
@@ -651,8 +651,8 @@ def collect_roa_roe(folder, bank, coding=None, concall_roa=None, concall_roe=Non
          independent cross-check alongside it (see below), is the only
          choice that doesn't risk silently fabricating a wrong figure.
       2. concall_roa/concall_roe - an earnings-call deck's own reported
-         figure, supplied by the caller (runfinder.py) rather than looked
-         up here, since this module can't import callfinder.py's term
+         figure, supplied by the caller (cli.py) rather than looked
+         up here, since this module can't import decks.py's term
          matching without a circular dependency.
       3. this fin folder's own manual formula (compute_ratios) as a last
          resort, clearly labeled as an approximation.

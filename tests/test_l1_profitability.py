@@ -4,8 +4,8 @@ The profitability layouts and the entity-row grouper. Four of these six pin
 known-wrong behaviour: each one produces a plausible number rather than an
 error, so nothing downstream notices.
 """
-from financialReports import acctfinder as af
-from earningsCalls.callfinder import _row_sections
+import financialReports as fin
+from earningsCalls.decks import _row_sections
 
 
 def md(*lines):
@@ -29,14 +29,14 @@ def test_O1_row_sections_maps_rows_to_the_nearest_bare_header_row():
 
 
 def test_O2_metric_label_split_across_two_cells_is_still_classified():
-    assert af.classify_metric_row(["資產報酬率", "稅後", "1.2"]) == "roa_posttax"
-    assert af.classify_metric_row(["資產報酬率(稅後)", "", "1.2"]) == "roa_posttax"
-    assert af.classify_metric_row(["純益率", "", "30"]) == "profit_margin"
+    assert fin.classify_metric_row(["資產報酬率", "稅後", "1.2"]) == "roa_posttax"
+    assert fin.classify_metric_row(["資產報酬率(稅後)", "", "1.2"]) == "roa_posttax"
+    assert fin.classify_metric_row(["純益率", "", "30"]) == "profit_margin"
     # ROE is recognised only as 淨值報酬率. 權益報酬率 / 股東權益報酬率 are not
     # in the vocabulary - pinned because widening it is an easy accidental
     # "improvement" during a refactor, and it would change which row wins.
-    assert af.classify_metric_row(["淨值報酬率", "稅後", "10"]) == "roe_posttax"
-    assert af.classify_metric_row(["權益報酬率", "稅前", "10"]) is None
+    assert fin.classify_metric_row(["淨值報酬率", "稅後", "10"]) == "roe_posttax"
+    assert fin.classify_metric_row(["權益報酬率", "稅前", "10"]) is None
 
 
 def test_O3_a_full_width_dash_holds_its_metric_position():
@@ -47,7 +47,7 @@ def test_O3_a_full_width_dash_holds_its_metric_position():
     expected = {"roa_pretax": 0.5, "roa_posttax": None, "roe_pretax": 5,
                 "roe_posttax": 6, "profit_margin": 30}
     for dash in ("-", "—", "–"):
-        assert af.extract_metrics(["本公司", "0.5", dash, "5.0", "6.0", "30.0"]) == expected
+        assert fin.extract_metrics(["本公司", "0.5", dash, "5.0", "6.0", "30.0"]) == expected
 
 
 def test_O4_a_section_heading_no_longer_disables_layout_3(tmp_path):
@@ -60,7 +60,7 @@ def test_O4_a_section_heading_no_longer_disables_layout_3(tmp_path):
                     "1. 前言", "",
                     "| 項目 | 114年12月31日 |", "|---|---|",
                     "| 資產報酬率(稅後) | 0.8 |")
-    assert af.extract_single_entity_profitability_tables(path)[0]["roa_posttax"] == 0.8
+    assert fin.extract_single_entity_profitability_tables(path)[0]["roa_posttax"] == 0.8
 
     # A heading that really does name an entity still hands the table to
     # layout 2, so the same table is never counted under both layouts.
@@ -68,8 +68,8 @@ def test_O4_a_section_heading_no_longer_disables_layout_3(tmp_path):
                        "1. 玉山金控及子公司", "",
                        "| 項目 | 114年12月31日 |", "|---|---|",
                        "| 資產報酬率(稅後) | 0.8 |")
-    assert af.extract_single_entity_profitability_tables(claimed) == []
-    assert af.extract_transposed_entity_tables(claimed)[0]["entity"] == "玉山金控及子公司"
+    assert fin.extract_single_entity_profitability_tables(claimed) == []
+    assert fin.extract_transposed_entity_tables(claimed)[0]["entity"] == "玉山金控及子公司"
 
 
 def test_O4b_selection_prefers_the_correctly_attributed_copy(tmp_path):
@@ -81,9 +81,9 @@ def test_O4b_selection_prefers_the_correctly_attributed_copy(tmp_path):
              "1. 前言", "", "獲利能力", "",
              "| 項目 | 114年12月31日 |", "|---|---|",
              "| 資產報酬率(稅後) | 0.8 |", "| 淨值報酬率(稅後) | 9.9 |")
-    entries = af.find_profitability_entries(tmp_path)
+    entries = fin.find_profitability_entries(tmp_path)
     assert sorted(str(e["entity"]) for e in entries) == ["None", "前言"]
-    chosen = af._select_profitability_entry(entries, "玉山")
+    chosen = fin._select_profitability_entry(entries, "玉山")
     assert chosen["entity"] is None and chosen["roa_posttax"] == 0.8
 
 
@@ -96,12 +96,12 @@ def test_O5_layout_2_labels_a_period_range_by_its_end_date(tmp_path):
                     "1. 測試銀行", "",
                     "| 項目 | 115年1月1日至3月31日 |", "|---|---|",
                     "| 資產報酬率(稅後) | 0.8 |")
-    row = af.extract_transposed_entity_tables(path)[0]
+    row = fin.extract_transposed_entity_tables(path)[0]
     assert row["period_label"] == "115年3月31日"
     assert row["quarter_num"] == 1
     # The two parsers, side by side - why the wrong one looked plausible.
-    assert af.parse_period_header_date("115年1月1日至3月31日") == (115, 3, 31)
-    assert af.parse_single_date("115年1月1日至3月31日") == (115, 1, 1)
+    assert fin.parse_period_header_date("115年1月1日至3月31日") == (115, 3, 31)
+    assert fin.parse_single_date("115年1月1日至3月31日") == (115, 1, 1)
 
 
 def test_O5b_layout_2_still_reads_a_plain_single_date_header(tmp_path):
@@ -111,7 +111,7 @@ def test_O5b_layout_2_still_reads_a_plain_single_date_header(tmp_path):
                     "1. 測試銀行", "",
                     "| 項目 | 114年12月31日 |", "|---|---|",
                     "| 資產報酬率(稅後) | 0.8 |")
-    row = af.extract_transposed_entity_tables(path)[0]
+    row = fin.extract_transposed_entity_tables(path)[0]
     assert row["period_label"] == "114年12月31日" and row["quarter_num"] == 4
 
 
@@ -120,7 +120,7 @@ def test_O6_an_account_name_containing_銀行_is_not_an_entity_row():
     match, so an ordinary balance-sheet line like 存放銀行同業 was read as an
     entity and swallowed the rows beneath it as continuations. That branch is
     now anchored - anything after the keyword must be a company suffix."""
-    assert af.group_rows_by_entity(md("| 存放銀行同業 | 100 |", "| 現金 | 50 |")) == []
+    assert fin.group_rows_by_entity(md("| 存放銀行同業 | 100 |", "| 現金 | 50 |")) == []
 
 
 def test_O6b_real_entity_labels_still_match():
@@ -131,5 +131,5 @@ def test_O6b_real_entity_labels_still_match():
     for label in ["合併", "本公司", "本公司及子公司", "國泰世華銀行",
                   "玉山商業銀行", "中國信託商業銀行股份有限公司",
                   "國泰人壽保險股份有限公司"]:
-        entries = af.group_rows_by_entity(md(f"| {label} | 1.0 |"))
+        entries = fin.group_rows_by_entity(md(f"| {label} | 1.0 |"))
         assert [e[0] for e in entries] == [label], label

@@ -38,19 +38,19 @@ python -m pytest
 
 ```bash
 # 財報：單一報表 / 全部 / 比率 / 精選摘要
-python src/userInteractions/runfinder.py acct <資料夾> balance_sheet
-python src/userInteractions/runfinder.py acct <資料夾> summary --period 1 -v
-python src/userInteractions/runfinder.py acct <資料夾> summary --bank 玉山 --industry 金融業
-python src/userInteractions/runfinder.py acct <資料夾> all --export csv
+python src/userInteractions/cli.py acct <資料夾> balance_sheet
+python src/userInteractions/cli.py acct <資料夾> summary --period 1 -v
+python src/userInteractions/cli.py acct <資料夾> summary --bank 玉山 --industry 金融業
+python src/userInteractions/cli.py acct <資料夾> all --export csv
 
 # 法說會
-python src/userInteractions/runfinder.py call --folder <資料夾> -v
+python src/userInteractions/cli.py call --folder <資料夾> -v
 
 # 自動判斷資料夾類型，兩個資料夾可合併輸出
-python src/userInteractions/runfinder.py --export excel
+python src/userInteractions/cli.py --export excel
 
 # 金管會公開月報（會連外網）
-python src/userInteractions/runfinder.py npl --banks 玉山 中信 --year 114
+python src/userInteractions/cli.py npl --banks 玉山 中信 --year 114
 ```
 
 常用旗標：
@@ -66,7 +66,7 @@ python src/userInteractions/runfinder.py npl --banks 玉山 中信 --year 114
 
 ## Excel 匯出位置
 
-`runfinder.py --export excel` 寫到 `~/Downloads`（`_EXCEL_EXPORT_DIR`）。CSV 匯出寫在來源資料夾裡。
+`cli.py --export excel` 寫到 `~/Downloads`（`_EXCEL_EXPORT_DIR`）。CSV 匯出寫在來源資料夾裡。
 
 ## 平台
 

@@ -13,8 +13,8 @@ loan recomposition needs it as a standalone figure. This regulator dataset
 reports it uniformly for every bank, every month, so it's a reliable
 fallback when (and only when) a deck lacks its own number.
 
-Standalone by design (no import from acctfinder/callfinder/runfinder) so it
-can be tested and scheduled on its own; callfinder.py calls
+Standalone by design (no import from statements/decks/cli) so it
+can be tested and scheduled on its own; decks.py calls
 fetch_for_quarter() from here for the con-call fallback path.
 
 Page layout (confirmed against real downloads, 2026-07):
@@ -34,8 +34,8 @@ Page layout (confirmed against real downloads, 2026-07):
     so a future column reordering doesn't silently return the wrong metric.
 
 Usage:
-    python npl_finder.py                    # latest month of both datasets
-    python npl_finder.py --year 2025 --quarter 4
+    python disclosures.py                    # latest month of both datasets
+    python disclosures.py --year 2025 --quarter 4
 """
 
 import argparse
@@ -94,7 +94,7 @@ CC_UNIT = "新臺幣千元"
 # user-supplied ground truth from the actual government page.
 # Both already stored as percent-scale numbers in the sheet - never
 # divide/multiply these again, just append '%' on display (see format_pct
-# in acctfinder.py/callfinder.py).
+# in statements.py/decks.py).
 NPL_RATIO_HEADER = "逾放比率(%)"
 NPL_COVERAGE_HEADER = "備抵呆帳/逾期放款(%)"
 
@@ -103,7 +103,7 @@ NPL_COVERAGE_HEADER = "備抵呆帳/逾期放款(%)"
 # instead. See core/industry.py, where exactly this bit once.
 _CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "npl_cache"
 
-_USER_AGENT = "Mozilla/5.0 (compatible; npl_finder/2.0)"
+_USER_AGENT = "Mozilla/5.0 (compatible; disclosures/2.0)"
 
 _NPL_PERIOD_RE = re.compile(r"(\d{3})_(\d{1,2})(?:\(\d+\))?\.xlsx", re.IGNORECASE)
 # Matched against the RAW (still percent-encoded) href, since the YYYMM_
@@ -394,7 +394,7 @@ def thousands_to_billions(value):
 
 
 def fetch_for_quarter(western_year, quarter, banks=TARGET_BANKS, cache_dir=_CACHE_DIR, verbose=False):
-    """Both datasets for one fiscal quarter, as callfinder.py's con-call
+    """Both datasets for one fiscal quarter, as decks.py's con-call
     fallback needs them. Returns {"credit_card": {...}, "overdue": {...}},
     each an individual fetch result dict, with credit_card carrying an
     extra "values_billions" already unit-converted for con-call use.

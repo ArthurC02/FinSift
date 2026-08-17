@@ -30,14 +30,27 @@ sys.path.insert(0, str(SRC))
 # directly under src/) and the package layout (src/financialReports/... etc).
 # That is not tidiness: A/B is the only check that a restructure changed no
 # behaviour, and it can only say so if the same harness reads both trees.
+# Three layouts have existed and A/B must read all of them, because its whole
+# job is to compare a tree against an older one. Newest first:
+#   1. packages, domain names      src/financialReports/statements.py
+#   2. packages, legacy names      src/financialReports/acctfinder.py
+#   3. flat                        src/acctfinder.py
 try:
-    from regulatorDatasets import npl_finder
-    from financialReports import acctfinder as af
-    from earningsCalls import callfinder as cf
-    from userInteractions import runfinder as rf
-except ModuleNotFoundError:
-    import npl_finder
-    import acctfinder as af, callfinder as cf, runfinder as rf
+    from regulatorDatasets import disclosures as npl_finder
+    import financialReports as af
+    from earningsCalls import decks as cf
+    from userInteractions import cli as rf
+except ImportError:   # NOT ModuleNotFoundError: `from pkg import missing_submodule`
+                      # raises plain ImportError when the package itself exists.
+    try:
+        from regulatorDatasets import npl_finder
+        from financialReports import acctfinder as af
+        from earningsCalls import callfinder as cf
+        from userInteractions import runfinder as rf
+    except ImportError:   # NOT ModuleNotFoundError: `from pkg import missing_submodule`
+                      # raises plain ImportError when the package itself exists.
+        import npl_finder
+        import acctfinder as af, callfinder as cf, runfinder as rf
 npl_finder._fetch_url = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("network stubbed"))
 
 FIX, DECK, DECK2 = FIXTURES / "fixture", FIXTURES / "deck", FIXTURES / "deck2"

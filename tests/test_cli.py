@@ -6,13 +6,13 @@ import sys
 
 import pytest
 
-from financialReports import acctfinder as af
+import financialReports as fin
 
 
 def run_cli(monkeypatch, *argv):
-    monkeypatch.setattr(sys, "argv", ["acctfinder.py", *argv])
+    monkeypatch.setattr(sys, "argv", ["fin.py", *argv])
     with pytest.raises(SystemExit) as exc:
-        af.main()
+        fin.main()
     return exc.value.code
 
 
@@ -41,6 +41,6 @@ def test_E1_equity_statement_gets_the_explanation_not_a_traceback(monkeypatch, c
 def test_supported_statements_are_unaffected(monkeypatch, tmp_path):
     # The guard must reject only equity_statement. A supported statement with
     # an explicit coding file runs to completion on an empty folder.
-    monkeypatch.setattr(sys, "argv", ["acctfinder.py", str(tmp_path), "balance_sheet",
-                                      "--coding", af.INDUSTRY_CODING_FILES["金融業"]])
-    af.main()
+    monkeypatch.setattr(sys, "argv", ["fin.py", str(tmp_path), "balance_sheet",
+                                      "--coding", fin.INDUSTRY_CODING_FILES["金融業"]])
+    fin.main()

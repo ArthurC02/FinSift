@@ -10,15 +10,16 @@
 
 | 進入點 | 做什麼 |
 |---|---|
-| `src/financialReports/acctfinder.py` | 財報擷取的 CLI 與逐表 dump。**用法定科目代碼精確比對**，不是文字比對。也是門面：`summary` / `ratios` / `entities` 的公開名稱都從這裡再匯出，所以 `acctfinder.X` 一律有效 |
-| `src/earningsCalls/callfinder.py` | 法說會簡報擷取。文字比對，詞彙定義在 `data/con_call_terms.json` |
-| `src/userInteractions/runfinder.py` | 自動判斷資料夾是財報還是法說會，跑對應的擷取器並合併輸出 |
-| `src/regulatorDatasets/npl_finder.py` | 抓金管會銀行局公開月報。**刻意完全獨立**，不匯入其他三個 |
+| `src/financialReports/` | 財報擷取。**用法定科目代碼精確比對**，不是文字比對。套件本身就是門面：`import financialReports as fin` 之後 `fin.X` 一律有效，不必知道名字住在哪個檔 |
+| `src/earningsCalls/decks.py` | 法說會簡報擷取。文字比對，詞彙定義在 `data/con_call_terms.json` |
+| `src/userInteractions/cli.py` | 自動判斷資料夾是財報還是法說會，跑對應的擷取器並合併輸出 |
+| `src/regulatorDatasets/disclosures.py` | 抓金管會銀行局公開月報。**刻意完全獨立**，不匯入其他三個 |
 
 財報側再往下分三層，**單向**、不得回頭：
 
 ```
-acctfinder（CLI + 逐表 dump）
+financialReports/__init__.py   ← 門面，對外只有這一個地址
+    statements（三大報表 dump、科目字典、acct 子命令）
         └── summary（layout、collect_summary_rows、匯出）
                 └── ratios（獲利能力表解析、compute_ratios、collect_roa_roe）
                         └── entities（BANK_PROFILES、代碼 fallback、機構偵測）
@@ -29,7 +30,7 @@ acctfinder（CLI + 逐表 dump）
 
 `src/core/` 是共用解析層（`industry` / `lookup` / `tables` / `numbers` / `text`），單向依賴 `lookup → tables → text`，**不得匯入任何擷取器**。
 
-> **測試打 monkeypatch 要打在真正被讀取的模組上**，不是 `acctfinder` 這個門面。`compute_ratios` 住在 `ratios`，`collect_summary_rows` 住在 `summary`（它在 import 時就把 `collect_roa_roe` 綁進自己的命名空間）。打錯地方 = 測試全綠但跑的是真程式。
+> **測試打 monkeypatch 要打在真正被讀取的模組上**，不是 `financialReports` 這個門面。`compute_ratios` 住在 `ratios`，`collect_summary_rows` 住在 `summary`（它在 import 時就把 `collect_roa_roe` 綁進自己的命名空間）。打錯地方 = 測試全綠但跑的是真程式。
 
 相依只有 `openpyxl` 與 `pytest`（無 `pyproject.toml`）。建環境、CLI 用法、旗標 → [docs/SETUP.md](docs/SETUP.md)
 
@@ -37,9 +38,9 @@ acctfinder（CLI + 逐表 dump）
 
 違反這些會造成**靜默的錯誤數字**，而不是報錯：
 
-1. **不要停用 `npl_finder` 的 SSL 驗證。** 原始碼寫明這是刻意的（MITM 風險）。
+1. **不要停用 `disclosures` 的 SSL 驗證。** 原始碼寫明這是刻意的（MITM 風險）。
 2. **不要讓 CI 或 A/B 真的連 `banking.gov.tw`。** 必須 stub `_fetch_url`。真的連上外網視為 harness 設定失敗，不以重跑判定結果。
-3. **不要合併 `acctfinder` 與 `callfinder` 兩份同名的 `print_summary_rows` / `write_summary_csv`。** 名字相同但列的形狀不同，合併是設計決定不是清理。
+3. **不要合併 `statements` 與 `decks` 兩份同名的 `print_summary_rows` / `write_summary_csv`。** 名字相同但列的形狀不同，合併是設計決定不是清理。
 4. **測試是 characterization（特徵化）測試**，期望值來自「現行實際行為」而非規格。修 bug 時，**改碼與翻轉斷言必須在同一支 commit**。
 5. **判不出來就拒絕，不要猜。** 這個 codebase 反覆出現的失效不是崩潰，是靜默的錯數字。判不出唯一機構就要求 `--bank`，判不出 layout 就要求 `--industry`，沒有依據就不要憑空補設定。
 
@@ -48,8 +49,8 @@ acctfinder（CLI + 逐表 dump）
 ```powershell
 python -m pytest            # V1 行為
 python tools\undefined.py   # V3 缺漏 import（含巢狀在 dict 裡的 lambda）
-python src\userInteractions\runfinder.py --help                      # V2 四個 CLI
-foreach ($c in 'acct','call','npl') { python src\userInteractions\runfinder.py $c --help }
+python src\userInteractions\cli.py --help                      # V2 四個 CLI
+foreach ($c in 'acct','call','npl') { python src\userInteractions\cli.py $c --help }
 python tools\ab.py <改動前的 src> > before.txt   # V4 A/B 位元組比對
 ```
 

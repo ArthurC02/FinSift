@@ -40,16 +40,16 @@
 ## 1. 現況盤點
 
 ```
-src/financialReports/acctfinder.py   2,166 行   CLI + Excel 字典 + markdown 解析 + 數值 + 報表擷取
+src/financialReports/statements.py   2,166 行   CLI + Excel 字典 + markdown 解析 + 數值 + 報表擷取
                                + 獲利能力 3 layout + 比率計算 + 策展摘要 + CSV + tkinter
-src/earningsCalls/callfinder.py   1,331 行   從 acctfinder 匯入 13 個名字
-src/userInteractions/runfinder.py      479 行   同時匯入 acctfinder 與 callfinder，並自帶一份 page_num
-src/regulatorDatasets/npl_finder.py     445 行   刻意獨立，無跨模組匯入
+src/earningsCalls/decks.py   1,331 行   從 statements 匯入 13 個名字
+src/userInteractions/cli.py      479 行   同時匯入 statements 與 decks，並自帶一份 page_num
+src/regulatorDatasets/disclosures.py     445 行   刻意獨立，無跨模組匯入
                     ─────
                     4,421 行   測試覆蓋率 0%
 ```
 
-真正的耦合問題只有一個：**`callfinder` 從 `acctfinder` 匯入 13 個名字**，其中 11 個其實是與財報無關的通用解析工具（`parse_numeric`、`_split_row`、`parse_pipe_tables`、`format_*`…）。`acctfinder` 因此同時是「財報擷取器」和「共用解析函式庫」，這是所有結構問題的根。
+真正的耦合問題只有一個：**`decks` 從 `statements` 匯入 13 個名字**，其中 11 個其實是與財報無關的通用解析工具（`parse_numeric`、`_split_row`、`parse_pipe_tables`、`format_*`…）。`statements` 因此同時是「財報擷取器」和「共用解析函式庫」，這是所有結構問題的根。
 
 其餘是局部污垢，不是結構問題：3 組重複定義、5 個零引用符號、1 個檔案過長。
 
@@ -120,9 +120,9 @@ pytest.ini             # 只設 testpaths 與 -q
 
 | # | 動作 | 行為 |
 |---|---|---|
-| 2.1 | 刪除 `acctfinder.py` L146–155 的 `_CODE_SHAPE_RE` + `_looks_like_code`（**前**一份） | **無改變** |
-| 2.2 | `runfinder.page_num` 改為從 `acctfinder` 匯入，刪本地副本 | 無改變 |
-| 2.3 | `callfinder._contains_any` 改為從 `acctfinder` 匯入，刪本地副本 | 無改變 |
+| 2.1 | 刪除 `statements.py` L146–155 的 `_CODE_SHAPE_RE` + `_looks_like_code`（**前**一份） | **無改變** |
+| 2.2 | `cli.page_num` 改為從 `statements` 匯入，刪本地副本 | 無改變 |
+| 2.3 | `decks._contains_any` 改為從 `statements` 匯入，刪本地副本 | 無改變 |
 | 2.4 | 不動 `print_summary_rows` / `write_summary_csv` | 無改變 |
 
 **2.1 的方向很重要，容易做反。** 生效的是 **後**一份（L479，裸 `cell`，非字串會丟 `TypeError`）；前一份（L149，`str(cell).strip()`）從第 476 行被定義的那一刻起就是死碼。**刪前者、留後者 = 零行為改變**，測試 C7 保持綠。若反過來刪後者、留前者，`_looks_like_code(10000)` 會從 `TypeError` 變成 `True`，C7 變紅——那是行為改變，需要另外決定要不要，不能混在這階段。
@@ -150,17 +150,17 @@ src/
     tables.py    build_raw_lines, _split_row, _is_table_divider,
                  parse_pipe_tables, _split_dual_column_tables,
                  restrict_section, group_rows_by_code, _looks_like_code
-  acctfinder.py  (≈1,450 行)
-  callfinder.py  (≈1,280 行)
-  runfinder.py
-  npl_finder.py
+  statements.py  (≈1,450 行)
+  decks.py  (≈1,280 行)
+  cli.py
+  disclosures.py
 ```
 
-`core/` 不依賴任何上層，內部依賴只允許單向的 `tables.py → text.py`（`despace_cjk`）；`text.py`、`numbers.py` 不回頭依賴 `tables.py`。`npl_finder.py` 維持獨立，不碰。
+`core/` 不依賴任何上層，內部依賴只允許單向的 `tables.py → text.py`（`despace_cjk`）；`text.py`、`numbers.py` 不回頭依賴 `tables.py`。`disclosures.py` 維持獨立，不碰。
 
-搬完之後，`callfinder` 對 `acctfinder` 的匯入從 13 個降到 3 個：`derive_quarter_num`、`detect_bank`（這兩個是真的財報語意，不是通用工具，留在 `acctfinder` 正確），以及 `pick_folder`（tkinter 對話框，語意上不屬於任一邊）。
+搬完之後，`decks` 對 `statements` 的匯入從 13 個降到 3 個：`derive_quarter_num`、`detect_bank`（這兩個是真的財報語意，不是通用工具，留在 `statements` 正確），以及 `pick_folder`（tkinter 對話框，語意上不屬於任一邊）。
 
-`pick_folder` 可以另開 `core/ui.py` 收掉，把數字壓到 2——但那是個只有一個函式的模組，而 `runfinder` 還有自己的 `pick_folders`（不同函式，不是重複）。**建議先留著不動**，等 Phase 5 CLI 薄化時它自然會跟著 `main()` 一起搬，屆時再看要不要獨立。
+`pick_folder` 可以另開 `core/ui.py` 收掉，把數字壓到 2——但那是個只有一個函式的模組，而 `cli` 還有自己的 `pick_folders`（不同函式，不是重複）。**建議先留著不動**，等 Phase 5 CLI 薄化時它自然會跟著 `main()` 一起搬，屆時再看要不要獨立。
 
 ### 搬移方式
 
@@ -172,18 +172,18 @@ src/
 
 | 陷阱 | 對策 |
 |---|---|
-| `try: import openpyxl / except ImportError` 是無名 AST 節點，name-keyed manifest 會漏掉 | 手動確認搬移後 `openpyxl` 仍在 `acctfinder` 命名空間 |
+| `try: import openpyxl / except ImportError` 是無名 AST 節點，name-keyed manifest 會漏掉 | 手動確認搬移後 `openpyxl` 仍在 `statements` 命名空間 |
 | 巢狀在 dict literal 裡的 lambda 失去 import | 跑 `tools/undefined.py`，且**實際執行** Phase 1c 的 12 條 |
-| `af.` / `cf.` 限定名跟著搬進沒有該別名的模組 | Phase 3 不搬 `runfinder`，這個風險延到 Phase 5 |
+| `af.` / `cf.` 限定名跟著搬進沒有該別名的模組 | Phase 3 不搬 `cli`，這個風險延到 Phase 5 |
 | 註解區塊與它說明的程式碼分家 | `segment.py` 已處理（向上吃連續註解，跨空行但不跨前一節點） |
 
-**Exit criteria**：L0/L1/L2 全綠 + 下方 §9 對 Phase 3 規定的四道驗證全過 + `callfinder` 對 `acctfinder` 的匯入 ≤ 3 個，且其中不含任何通用解析工具。
+**Exit criteria**：L0/L1/L2 全綠 + 下方 §9 對 Phase 3 規定的四道驗證全過 + `decks` 對 `statements` 的匯入 ≤ 3 個，且其中不含任何通用解析工具。
 
 ---
 
 ## 7. Phase 4 — ⚠️ 決策點：要不要再拆
 
-Phase 3 做完，結構問題已經解決：共用層獨立、`callfinder` 對 `acctfinder` 的匯入從 13 降到最多 3 個。剩下的只是「`acctfinder.py` 還有 1,450 行」。
+Phase 3 做完，結構問題已經解決：共用層獨立、`decks` 對 `statements` 的匯入從 13 降到最多 3 個。剩下的只是「`statements.py` 還有 1,450 行」。
 
 **我的建議是先停在這裡，把 Phase 5–7 做完再回頭看。** 理由：
 
@@ -209,9 +209,9 @@ call/   terms.py periods.py tables.py summary.py
 
 **前置門檻：** Phase 1e 的 34 條 L3/L4 案例全綠；若 Phase 4 跳過，仍不得略過這個門檻。
 
-`acctfinder.py` / `callfinder.py` / `runfinder.py` 的 `main()` 與 argparse 設定移到 `src/cli/`，原檔留兩行 wrapper 以維持 `python src/userInteractions/runfinder.py acct ...` 不變。
+`statements.py` / `decks.py` / `cli.py` 的 `main()` 與 argparse 設定移到 `src/cli/`，原檔留兩行 wrapper 以維持 `python src/userInteractions/cli.py acct ...` 不變。
 
-**這一步會改變 `Path(__file__)` 的深度**（`src/cli/acct.py` 比 `src/financialReports/acctfinder.py` 深一層），`callfinder` 的 `--config` 預設值要跟著調。TEST_DESIGN §3.9 的 PA1–PA4 正是為此存在。
+**這一步會改變 `Path(__file__)` 的深度**（`src/cli/acct.py` 比 `src/financialReports/statements.py` 深一層），`decks` 的 `--config` 預設值要跟著調。TEST_DESIGN §3.9 的 PA1–PA4 正是為此存在。
 
 同時處理 Phase 3 延後的 `af.`/`cf.` 限定名重繫結。
 
@@ -229,7 +229,7 @@ TEST_DESIGN §7 的 21 個執行期 bug（#19 已在 Phase 2 處理，#20 已在
 
 | 批次 | 項目 | 說明 |
 |---|---|---|
-| 7a | #2 #3 #4 #21 | 高：`nth_value` 非法 period、runfinder 資料丟失、CIR `abs(None)`、`compute_ratios` 除零逸出 |
+| 7a | #2 #3 #4 #21 | 高：`nth_value` 非法 period、cli 資料丟失、CIR `abs(None)`、`compute_ratios` 除零逸出 |
 | 7b | #5–#13 #22 | 中 |
 | 7c | #14–#18 #23 | 低 |
 | 7d | #1 | 最後處理：無 % 欄的 `nth_value` 核心假設 |
@@ -261,7 +261,7 @@ Phase 6 與 Phase 7 使用專屬協定：
 **兩個上次踩過的坑**：
 
 - `git diff --stat` 加了路徑過濾會**關掉 rename 偵測**，整個檔案顯示成新增。要看真實 diff 規模請用 `git diff -M` 不帶路徑參數。
-- CI 與 A/B 比對一律 stub `npl_finder` 網路。若任何一邊真的連到 `banking.gov.tw`，視為 harness 設定失敗，不以重跑判定結果。
+- CI 與 A/B 比對一律 stub `disclosures` 網路。若任何一邊真的連到 `banking.gov.tw`，視為 harness 設定失敗，不以重跑判定結果。
 
 ---
 
@@ -285,7 +285,7 @@ Phase 6 與 Phase 7 使用專屬協定：
 | 加型別註解 | 與重構無關，會污染 V2 行數比對；要加就另開一批 |
 | 換套件管理／加 `pyproject.toml`／打包成可安裝套件 | 目前 `python src/x.py` 就能跑，沒有痛點 |
 | 統一 `print_summary_rows` 兩份實作 | 見 TEST_DESIGN §4.6，是設計決定不是清理 |
-| 修 `npl_finder` 的 SSL 行為 | 原始碼已寫明不停用驗證是刻意的（MITM 風險），照做 |
+| 修 `disclosures` 的 SSL 行為 | 原始碼已寫明不停用驗證是刻意的（MITM 風險），照做 |
 | 動 `data/*.xlsx` 與 `con_call_terms.json` | 資料不是程式碼 |
 | Phase 4 的深層拆分 | 需你明確指示，見 §7 |
 

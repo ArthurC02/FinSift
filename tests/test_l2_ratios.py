@@ -7,15 +7,16 @@ wrong. §5.8 covers the remaining decision helpers plus two crash paths.
 """
 import pytest
 
-from financialReports import acctfinder as af
-from earningsCalls import callfinder as cf
+import financialReports as fin
+from earningsCalls import decks
 # Stubs go on the module whose globals the consumer actually reads, not on the
-# acctfinder facade that re-exports the name. compute_ratios and
+# fin facade that re-exports the name. compute_ratios and
 # collect_roa_roe live in ratios.py; collect_summary_rows lives in summary.py
-# and binds collect_roa_roe into its own namespace at import. Patching `af`
+# and binds collect_roa_roe into its own namespace at import. Patching `fin`
 # would install a stub nothing looks at - green tests exercising real code.
 from financialReports import ratios
 from financialReports import summary
+from core.lookup import build_code_index, find_code_value
 
 # --------------------------------------------------------------------------
 # §5.2 collect_roa_roe / build - priority table (11 rules)
@@ -43,7 +44,7 @@ def build_roa(monkeypatch, tmp_path, disclosed=None, concall=None, manual=None):
         return {"roa": manual, "roe": manual, "quarter_num": 4}
 
     monkeypatch.setattr(ratios, "compute_ratios", fake_compute)
-    return af.collect_roa_roe(tmp_path, "中信", concall_roa=concall, concall_roe=concall)["roa"]
+    return fin.collect_roa_roe(tmp_path, "中信", concall_roa=concall, concall_roe=concall)["roa"]
 
 
 def test_B1_disclosure_only(monkeypatch, tmp_path):
@@ -168,39 +169,39 @@ def test_select_profitability_entry_treats_entity_None_as_in_scope():
     # Layout 3 has exactly one entity - the filing's own - so there is nothing
     # else it could be.
     entries = [entry(roa=1.0)]
-    assert af._select_profitability_entry(entries, "中信") is entries[0]
+    assert fin._select_profitability_entry(entries, "中信") is entries[0]
 
 
 def test_select_profitability_entry_prefers_an_alias_match():
     other = dict(entry(roa=1.0), entity="國泰世華銀行")
     mine = dict(entry(roa=2.0), entity="中國信託商業銀行")
-    assert af._select_profitability_entry([other, mine], "中信") is mine
+    assert fin._select_profitability_entry([other, mine], "中信") is mine
 
 
 def test_select_profitability_entry_prefers_an_entry_that_has_a_value():
     empty = entry(period="114年12月31日")                    # newer, but no value
     valued = entry(roa=1.0, period="114年9月30日")
-    assert af._select_profitability_entry([empty, valued], "中信") is valued
+    assert fin._select_profitability_entry([empty, valued], "中信") is valued
 
 
 def test_entity_tier_falls_back_to_the_older_behaviour_when_bank_is_unknown():
     # primary_aliases=None means the bank couldn't be detected. Rather than
     # rejecting every named entity, any bank-named one is treated as primary.
-    assert cf.entity_tier("台北富邦銀行", None) == 2
-    assert cf.entity_tier("富邦金控", None) == 0
-    assert cf.entity_tier(None, None) == 1
-    assert cf.entity_tier("台北富邦銀行", ["中國信託"]) == 0
+    assert decks.entity_tier("台北富邦銀行", None) == 2
+    assert decks.entity_tier("富邦金控", None) == 0
+    assert decks.entity_tier(None, None) == 1
+    assert decks.entity_tier("台北富邦銀行", ["中國信託"]) == 0
 
 
 def test_rank_key_has_three_levels_and_ignores_period_recency():
     # strength -> tier -> quarterly_bonus. The period's AGE is deliberately not
     # part of the key, so two equally-strong matches from different periods tie
     # and the winner is decided by filename order downstream.
-    assert cf._rank_key(2, None) == (2, 1, 0)
-    assert cf._rank_key(3, None) > cf._rank_key(2, None)
-    assert cf._rank_key(2, None, "4Q25", prefer_quarterly=True) == (2, 1, 1)
-    assert cf._rank_key(2, None, "FY25", prefer_quarterly=True) == (2, 1, 0)
-    assert cf._rank_key(2, None, "4Q25") == cf._rank_key(2, None, "1Q20")
+    assert decks._rank_key(2, None) == (2, 1, 0)
+    assert decks._rank_key(3, None) > decks._rank_key(2, None)
+    assert decks._rank_key(2, None, "4Q25", prefer_quarterly=True) == (2, 1, 1)
+    assert decks._rank_key(2, None, "FY25", prefer_quarterly=True) == (2, 1, 0)
+    assert decks._rank_key(2, None, "4Q25") == decks._rank_key(2, None, "1Q20")
 
 
 def write_md(folder, name, *lines):
@@ -224,16 +225,16 @@ def test_label_fallback_skips_a_row_with_no_value(tmp_path):
     "first file WITH A VALUE wins" contract that the code channel follows.
     """
     write_md(tmp_path, "007_a.md", VALUELESS_OPEX)
-    index = af.build_code_index(tmp_path, ["58400"],
-                                label_fallbacks=af.SUMMARY_LABEL_FALLBACKS)
+    index = build_code_index(tmp_path, ["58400"],
+                                label_fallbacks=fin.SUMMARY_LABEL_FALLBACKS)
     assert index["58400"] is None
 
     # And it keeps looking: a later file carrying the same label WITH a figure
     # now resolves it, which the old "first match wins" behaviour made
     # impossible.
     write_md(tmp_path, "008_b.md", "|  | 營業費用合計 | -68900 |")
-    index = af.build_code_index(tmp_path, ["58400"],
-                                label_fallbacks=af.SUMMARY_LABEL_FALLBACKS)
+    index = build_code_index(tmp_path, ["58400"],
+                                label_fallbacks=fin.SUMMARY_LABEL_FALLBACKS)
     assert index["58400"] == ("營業費用合計", -68900, "008_b.md")
 
 
@@ -247,7 +248,7 @@ def test_CIR_reports_N_A_instead_of_crashing_on_a_valueless_opex(monkeypatch, tm
     # industry passed explicitly: this fixture carries no entity legal name,
     # and summary mode now refuses a layout it can't tie to a scheme (see
     # INDUSTRY_SUMMARY_LAYOUTS). Nothing about CIR is affected.
-    rows = {r["term"]: r for r in af.collect_summary_rows(tmp_path, "中信", industry="金融業")}
+    rows = {r["term"]: r for r in fin.collect_summary_rows(tmp_path, "中信", industry="金融業")}
     assert rows["CIR"]["value"] is None
     assert rows["淨收益"]["value"] == 132450
 
@@ -259,9 +260,9 @@ def test_no_composite_component_has_a_label_fallback():
     COMPOSITE_TERMS component code appears in SUMMARY_LABEL_FALLBACKS. If that
     ever stops being true, the crash comes back somewhere new - so assert it
     rather than leave it as an unstated coincidence."""
-    components = {code for term in af.COMPOSITE_TERMS.values()
+    components = {code for term in fin.COMPOSITE_TERMS.values()
                   for codes in term.values() for code in codes}
-    assert components.isdisjoint(af.SUMMARY_LABEL_FALLBACKS)
+    assert components.isdisjoint(fin.SUMMARY_LABEL_FALLBACKS)
 
 
 def test_ZERO_ASSETS_degrades_instead_of_crashing_the_whole_run(monkeypatch, tmp_path):
@@ -283,11 +284,11 @@ def test_ZERO_ASSETS_degrades_instead_of_crashing_the_whole_run(monkeypatch, tmp
             ("label", values.get(code, 100), "007_bs.md"))
 
     with pytest.raises(RuntimeError, match="資產總計"):
-        af.compute_ratios(tmp_path, "中信")
+        fin.compute_ratios(tmp_path, "中信")
 
     # ...and via collect_roa_roe that now degrades rather than propagating.
     monkeypatch.setattr(ratios, "find_profitability_entries", lambda folder, verbose=False: [])
-    assert af.collect_roa_roe(tmp_path, "中信") == {"roa": None, "roe": None}
+    assert fin.collect_roa_roe(tmp_path, "中信") == {"roa": None, "roe": None}
 
 
 def test_zero_equity_is_caught_too(monkeypatch, tmp_path):
@@ -299,7 +300,7 @@ def test_zero_equity_is_caught_too(monkeypatch, tmp_path):
         lambda folder, code, period=1, verbose=False, label_fallback=None:
             ("label", values.get(code, 100), "007_bs.md"))
     with pytest.raises(RuntimeError, match="權益總計"):
-        af.compute_ratios(tmp_path, "中信")
+        fin.compute_ratios(tmp_path, "中信")
 
 
 # --------------------------------------------------------------------------
@@ -329,8 +330,8 @@ def test_ONE_no_percent_table_now_resolves_its_prior_period(tmp_path):
     compute_ratios raise, collect_roa_roe swallow it, and the ROA/ROE
     cross-check silently vanish with nothing in the output explaining why."""
     write_md(tmp_path, "007_bs.md", *NOPCT_BALANCE_SHEET)
-    assert af.find_code_value(tmp_path, "10000", period=1)[1] == 6120884
-    assert af.find_code_value(tmp_path, "10000", period=2)[1] == 5900000
+    assert find_code_value(tmp_path, "10000", period=1)[1] == 6120884
+    assert find_code_value(tmp_path, "10000", period=2)[1] == 5900000
 
 
 def test_ONE_a_share_column_table_is_read_exactly_as_before(tmp_path):
@@ -338,5 +339,5 @@ def test_ONE_a_share_column_table_is_read_exactly_as_before(tmp_path):
     second numeric is a percentage, not a prior period, and reading it as one
     would be a far worse bug than the one being fixed."""
     write_md(tmp_path, "007_bs.md", *PCT_BALANCE_SHEET)
-    assert af.find_code_value(tmp_path, "10000", period=1)[1] == 6120884
-    assert af.find_code_value(tmp_path, "10000", period=2) is None
+    assert find_code_value(tmp_path, "10000", period=1)[1] == 6120884
+    assert find_code_value(tmp_path, "10000", period=2) is None

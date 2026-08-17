@@ -6,7 +6,7 @@ defines the composites the layout it is read under actually needs
 error, never a silent N/A at run time).
 
 Top of the stack: reads entities for the profiles and ratios for the trailing
-ROA/ROE rows. Nothing imports this except acctfinder's CLI and runfinder.
+ROA/ROE rows. Nothing imports this except statements's CLI and cli.
 """
 import csv
 from pathlib import Path
@@ -196,7 +196,7 @@ _validate_profiles(BANK_PROFILES)
 
 # The three folder-wide lookups these extractors sit on moved to
 # core/lookup.py - both compute_ratios and collect_summary_rows need
-# them and neither owns them. Re-exported above, so `acctfinder.X`
+# them and neither owns them. Re-exported above, so `statements.X`
 # still resolves for callers and for tests that monkeypatch it.
 
 
@@ -228,7 +228,7 @@ def collect_summary_rows(folder, bank, period=1, verbose=False, coding=None,
         the csv/excel exports, which is where the distinction between "not
         disclosed" and "we failed to read this filing" actually matters.
     concall_roa/concall_roe: an earnings-call deck's own reported ROA/ROE
-    (looked up by the caller via callfinder.py, since this module can't
+    (looked up by the caller via decks.py, since this module can't
     import it - see collect_roa_roe), used as a fallback when this fin
     folder has no reported 獲利能力 disclosure table of its own.
     overrides_table: which per-bank code-override table to apply (defaults
@@ -426,7 +426,7 @@ def collect_summary_rows_finsum(folder, bank, period=1, verbose=False, coding=No
     collect_summary_rows rather than a separate parsing implementation, per
     explicit instruction to reuse the same logic as the full filing.
     Deliberately NOT wired into any automatic/default code path - only
-    called once a caller (runfinder.py's folder classifier) has positively
+    called once a caller (cli.py's folder classifier) has positively
     identified a folder as this document type, never run on a folder just
     because it happens to be a fin_report."""
     return collect_summary_rows(folder, bank, period=period, verbose=verbose, coding=coding,

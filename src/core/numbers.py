@@ -89,7 +89,7 @@ def format_pct(value):
 
 def format_maybe_pct(value, is_percent):
     """format_pct if is_percent, else format_value - for callers (like
-    callfinder's ad-hoc term search) that don't already know in advance
+    decks's ad-hoc term search) that don't already know in advance
     whether a term is a ratio, and so can't just always call format_pct.
     Without this, a matched cell like '1.27%' - parse_numeric strips the
     '%' sign, leaving the bare number 1.27 - would print as plain '1.27'

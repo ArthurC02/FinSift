@@ -13,7 +13,7 @@
 |---|---|---|
 | **產業** industry | 科目編碼字典、摘要報表定義、合理性範圍 | `INDUSTRY_CODING_FILES`、`INDUSTRY_SUMMARY_LAYOUTS` |
 | **機構** entity | 名稱別名、代碼覆寫、複合項組成、法說會主體別名 | `BANK_PROFILES` |
-| **文件類型** doctype | 走哪條擷取路徑 | `runfinder.classify_folder` |
+| **文件類型** doctype | 走哪條擷取路徑 | `cli.classify_folder` |
 
 ### 1.1 產業軸
 
@@ -48,11 +48,11 @@ BANK_PROFILES = {
 
 `_validate_profiles()` 在 **import 時**執行。欄位缺漏、空別名、不存在的產業、或「該機構的 layout 需要卻沒定義的 composite」都會讓 import 直接失敗。這是六張散表做不到的事。
 
-**推導視圖**：`BANKS`、`BANK_NAME_ALIASES`、`SUMMARY_CODE_OVERRIDES`、`SUMMARY_CODE_OVERRIDES_FINSUM`、`COMPOSITE_TERMS`、`callfinder.PRIMARY_BANK_ENTITIES` 全部由 `BANK_PROFILES` 推導，改一處即可。**不要直接編輯推導視圖。**
+**推導視圖**：`BANKS`、`BANK_NAME_ALIASES`、`SUMMARY_CODE_OVERRIDES`、`SUMMARY_CODE_OVERRIDES_FINSUM`、`COMPOSITE_TERMS`、`decks.PRIMARY_BANK_ENTITIES` 全部由 `BANK_PROFILES` 推導，改一處即可。**不要直接編輯推導視圖。**
 
 ### 1.3 文件類型軸
 
-`runfinder.classify_folder` 用**結構證據**而非文字證據判斷：
+`cli.classify_folder` 用**結構證據**而非文字證據判斷：
 
 | 類型 | 判準 |
 |---|---|
@@ -72,21 +72,21 @@ src/
 │   ├── text.py      CJK 空白、目錄行、頁碼、附註剝除
 │   ├── numbers.py   數值解析、第 N 期取值、格式化、年化
 │   └── tables.py    markdown 表格解析、雙欄拆分、代碼分組、% 欄推斷
-├── acctfinder.py    財報擷取 ＋ 產業字典 ＋ 機構 profile ＋ 摘要 ＋ CLI
-├── callfinder.py    法說會擷取（匯入 acctfinder 四個名字）
-├── runfinder.py     資料夾分類與合併（匯入 acctfinder 與 callfinder）
-└── npl_finder.py    金管會資料集（完全獨立）
+├── statements.py    財報擷取 ＋ 產業字典 ＋ 機構 profile ＋ 摘要 ＋ CLI
+├── decks.py    法說會擷取（匯入 statements 四個名字）
+├── cli.py     資料夾分類與合併（匯入 statements 與 decks）
+└── disclosures.py    金管會資料集（完全獨立）
 ```
 
 依賴方向嚴格單向：
 
 ```
-runfinder ──> callfinder ──> acctfinder ──> core/tables ──> core/text
+cli ──> decks ──> statements ──> core/tables ──> core/text
      └──────────────────────────┘                core/numbers
-npl_finder （不連接任何一邊）
+disclosures （不連接任何一邊）
 ```
 
-`callfinder` 對 `acctfinder` 只匯入四個名字：`derive_quarter_num`、`pick_folder`、`detect_bank`、`BANK_PROFILES`。**這四個都是金融領域語意或機構設定，不是通用解析工具** —— 通用的那些已經在 `core/`。若哪天發現又多了一個通用工具被從 `acctfinder` 匯入，那是它該搬進 `core/` 的信號。
+`decks` 對 `statements` 只匯入四個名字：`derive_quarter_num`、`pick_folder`、`detect_bank`、`BANK_PROFILES`。**這四個都是金融領域語意或機構設定，不是通用解析工具** —— 通用的那些已經在 `core/`。若哪天發現又多了一個通用工具被從 `statements` 匯入，那是它該搬進 `core/` 的信號。
 
 ---
 

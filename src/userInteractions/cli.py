@@ -3,7 +3,7 @@ Pick up to 2 folders of converted markdown (.md) files via a folder-picker
 dialog and auto-detect which one is a financial report (balance sheet /
 income statement / cash flow) and which one is an earnings-call deck (法說
 會 / 法人說明會), then run the right extractor's curated summary on each -
-so you don't have to remember which of acctfinder.py / callfinder.py to run
+so you don't have to remember which extractor to run
 or pass folders by hand.
 
 Detection:
@@ -19,7 +19,7 @@ Detection:
   evidence rather than a text mention.
 
 Usage:
-    python runfinder.py [--config con_call_terms.json] [--export csv] [-v]
+    python cli.py [--config con_call_terms.json] [--export csv] [-v]
 
 With no arguments, opens the folder-picker up to twice (cancel the second
 dialog if you only have one folder to classify).
@@ -31,7 +31,7 @@ import re
 import sys
 from pathlib import Path
 
-# `python src/userInteractions/runfinder.py` puts THIS directory on sys.path,
+# `python src/userInteractions/cli.py` puts THIS directory on sys.path,
 # not src/, so the sibling packages would not resolve. This is the one file
 # users are told to run by path (it is the single CLI - see _SUBCOMMANDS), so
 # it bootstraps src/ itself rather than making everyone set PYTHONPATH.
@@ -39,8 +39,8 @@ _SRC = Path(__file__).resolve().parent.parent
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from financialReports import acctfinder as af
-from earningsCalls import callfinder as cf
+import financialReports as fin
+from earningsCalls import decks
 
 # Windows consoles often default to cp1252, which can't print CJK output.
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
@@ -63,9 +63,9 @@ def load_all_codes():
     specific industry's dictionary (that happens later, per-folder, once
     a folder is known to be a financial report - see fin_report_rows)."""
     codes = set()
-    for path in af.INDUSTRY_CODING_FILES.values():
-        for stmt in af.STATEMENTS:
-            codes.update(af.load_code_dictionary(path, stmt).keys())
+    for path in fin.INDUSTRY_CODING_FILES.values():
+        for stmt in fin.STATEMENTS:
+            codes.update(fin.load_code_dictionary(path, stmt).keys())
     return codes
 
 
@@ -108,9 +108,9 @@ _FINSUM_MAX_FILES = 30
 # When a fin_report/fin_report_summary folder is paired 1:1 with a con_call
 # folder (see paired_con_folder/paired_fin_folder in main()), their rows are
 # combined into ONE sheet instead of two, in this fixed business order:
-# every fin_report row first (acctfinder.SUMMARY_LAYOUT's own order, ending
+# every fin_report row first (financialReports' SUMMARY_LAYOUT order, ending
 # 活存比/CIR pulled after ROA/ROE per request), then every con_call row
-# (callfinder.RATIO_TERMS/BALANCE_TERMS/NPL_RATIO_TERM/NPL_COVERAGE_TERM).
+# (decks.RATIO_TERMS/BALANCE_TERMS/NPL_RATIO_TERM/NPL_COVERAGE_TERM).
 # Deliberately spelled out in full (not "fin terms then leftover con terms")
 # so this list stays the single source of truth for the merged sheet's row
 # order - merge_fin_and_con_rows falls back to source order only for a term
@@ -160,7 +160,7 @@ def classify_folder(folder, codes, code_row_threshold=5):
     code_hits, con_hits). code_hits counts table rows whose first cell is
     an exact account code; con_hits counts files containing a con-call
     cover-page marker. 'fin_report_summary' (see _FINSUM_MARKER) routes to
-    acctfinder.collect_summary_rows_finsum() instead of the full-filing
+    financialReports.collect_summary_rows_finsum() instead of the full-filing
     collect_summary_rows() - same SUMMARY_LAYOUT items, different per-bank
     code scheme for 稅後淨利 (see SUMMARY_CODE_OVERRIDES_FINSUM)."""
     code_hits = 0
@@ -168,7 +168,7 @@ def classify_folder(folder, codes, code_row_threshold=5):
     has_finsum_marker = False
     # rglob, matching detect_bank / find_code_value / collect_statement_rows /
     # find_term_value. With glob, a folder whose .md files sat in a subdirectory
-    # classified as None and was skipped, while acctfinder run directly on the
+    # classified as None and was skipped, while statements run directly on the
     # same folder worked fine.
     paths = sorted(Path(folder).rglob("*.md"))
     for path in paths:
@@ -220,8 +220,8 @@ _EXCEL_SCALED_FORMAT = "#,##0.000"
 # A real Excel percentage type multiplies the stored number by 100 for
 # display (its underlying value is a fraction, e.g. 0.654 for "65.40%") -
 # but every ratio value in this codebase is already stored AS a percent
-# number (65.4 meaning 65.4%, per format_pct() throughout acctfinder.py/
-# callfinder.py). So the value is divided by 100 ONLY here, at the point of
+# number (65.4 meaning 65.4%, per format_pct() throughout financialReports/
+# decks.py). So the value is divided by 100 ONLY here, at the point of
 # writing an Excel-native percent cell, and nowhere else - the internal
 # "already-times-100" convention everywhere else is untouched.
 _EXCEL_PERCENT_FORMAT = "0.00%"
@@ -272,21 +272,21 @@ def open_file(path):
 def lookup_concall_roa_roe(concall_folder, config_path, bank, verbose):
     """Best-match ROA(稅後年化)/ROE(稅後年化) from an earnings-call deck, for
     collect_summary_rows' concall fallback - looked up here (not inside
-    acctfinder.py) since only this module imports both acctfinder.py and
-    callfinder.py; acctfinder.py importing callfinder.py would be circular
-    (callfinder.py already imports FROM acctfinder.py)."""
-    terms = cf.load_terms(config_path)
-    primary_aliases = cf.PRIMARY_BANK_ENTITIES.get(bank) if bank else None
-    roa = cf.find_term_value(concall_folder, terms["ROA(稅後年化)"], verbose=verbose,
+    financialReports) since only this module imports both packages, and
+    financialReports importing earningsCalls would be circular: earningsCalls
+    already imports FROM financialReports (entities, ratios, statements)."""
+    terms = decks.load_terms(config_path)
+    primary_aliases = decks.PRIMARY_BANK_ENTITIES.get(bank) if bank else None
+    roa = decks.find_term_value(concall_folder, terms["ROA(稅後年化)"], verbose=verbose,
                               prefer_quarterly=True, primary_aliases=primary_aliases)
-    roe = cf.find_term_value(concall_folder, terms["ROE(稅後年化)"], verbose=verbose,
+    roe = decks.find_term_value(concall_folder, terms["ROE(稅後年化)"], verbose=verbose,
                               prefer_quarterly=True, primary_aliases=primary_aliases)
     return (roa[1] if roa else None), (roe[1] if roe else None)
 
 
 def fin_report_rows(folder, verbose, concall_folder=None, config_path=_DEFAULT_CONFIG, finsum=False):
     """Returns (kind, rows_for_print_or_None, excel_rows) - kind is 'ok' or
-    'no_bank'. Runs the bank-scoped acctfinder summary once; callers decide
+    'no_bank'. Runs the bank-scoped statements summary once; callers decide
     whether to print it or fold it into a merged export. 'summary' mode
     never touches an industry coding dictionary for its main SUMMARY_LAYOUT
     rows (it matches raw document codes directly) - only the trailing ROA/
@@ -294,14 +294,14 @@ def fin_report_rows(folder, verbose, concall_folder=None, config_path=_DEFAULT_C
     collect_summary_rows. Its displayed term is now a fixed/standardized
     name (SUMMARY_LAYOUT), not the document's own wording - that's kept
     separately as matched_label. concall_folder: this bank's paired
-    earnings-call deck, if runfinder classified one alongside this fin
+    earnings-call deck, if cli classified one alongside this fin
     report folder - used only as ROA/ROE's fallback source (see
     collect_summary_rows/collect_roa_roe's priority order). finsum: True
     when classify_folder identified this as the quarterly SUMMARIZED
     disclosure (see _FINSUM_MARKER) - routes to
     collect_summary_rows_finsum() instead, which is otherwise identical
     except for a different 稅後淨利 code table."""
-    bank = af.detect_bank(folder)
+    bank = fin.detect_bank(folder)
     if bank is None:
         return "no_bank", None, None
     if verbose:
@@ -309,7 +309,7 @@ def fin_report_rows(folder, verbose, concall_folder=None, config_path=_DEFAULT_C
     concall_roa = concall_roe = None
     if concall_folder is not None:
         concall_roa, concall_roe = lookup_concall_roa_roe(concall_folder, config_path, bank, verbose)
-    collect_fn = af.collect_summary_rows_finsum if finsum else af.collect_summary_rows
+    collect_fn = fin.collect_summary_rows_finsum if finsum else fin.collect_summary_rows
     try:
         rows = collect_fn(folder, bank, verbose=verbose,
                            concall_roa=concall_roa, concall_roe=concall_roe)
@@ -324,7 +324,7 @@ def fin_report_rows(folder, verbose, concall_folder=None, config_path=_DEFAULT_C
     # Warned here, not at a print site: run_fin_report's csv and excel exits
     # never print the rows, and a batch run is exactly where a wholesale
     # failed read would otherwise pass unnoticed.
-    warning = af.summary_coverage_warning(rows, folder=folder)
+    warning = fin.summary_coverage_warning(rows, folder=folder)
     if warning:
         print(f"  {warning}")
     # r["term"] is the canonical/standardized display name (SUMMARY_LAYOUT),
@@ -344,18 +344,18 @@ def fin_report_rows(folder, verbose, concall_folder=None, config_path=_DEFAULT_C
         if not is_percent and isinstance(value, (int, float)):
             value = value / 1000
         excel_rows.append((r["term"], value, r.get("matched_label") or "",
-                            af.page_num(r["source_file"]), r.get("note") or "",
+                            fin.page_num(r["source_file"]), r.get("note") or "",
                             is_percent, not is_percent))
     return "ok", rows, excel_rows
 
 
 def con_call_rows(folder, config_path, verbose):
-    terms = cf.load_terms(config_path)
-    rows = cf.collect_con_call_summary(folder, terms, verbose=verbose)
+    terms = decks.load_terms(config_path)
+    rows = decks.collect_con_call_summary(folder, terms, verbose=verbose)
     excel_rows = []
     for r in rows:
         found = r.get("matched_label") or ""
-        page = af.page_num(r["source_file"])
+        page = fin.page_num(r["source_file"])
         note = r.get("note") or ""
         if r["kind"] == "ratio":
             excel_rows.append((r["term"], r["individual"], found, page, note, True, False))
@@ -371,35 +371,35 @@ def run_fin_report(folder, export, verbose, concall_folder=None, config_path=_DE
         # Name the candidates when there ARE some: at batch scale "couldn't
         # detect" alone doesn't say whether this entity is unsupported or
         # merely ambiguous, and only the second is fixable with --bank.
-        candidates = af.bank_candidates(folder)
+        candidates = fin.bank_candidates(folder)
         reason = (f"several banks are named ({', '.join(candidates)})" if candidates
                   else "no known bank name found")
         print(f"  Couldn't auto-detect the bank for {folder} - {reason} - skipping "
-              f"(run acctfinder.py directly with --bank to override).")
+              f"(re-run as `cli.py acct <folder> summary --bank ...` to override).")
         return None
     if kind == "no_layout":
-        print(f"  Skipping {folder} - {af.summary_layout_error(af.detect_industry_category(folder))} "
-              f"(run acctfinder.py directly with --industry to override).")
+        print(f"  Skipping {folder} - {fin.summary_layout_error(fin.detect_industry_category(folder))} "
+              f"(re-run as `cli.py acct <folder> summary --industry ...` to override).")
         return None
     if export == "csv":
-        out_path = af.write_summary_csv(folder, rows)
+        out_path = fin.write_summary_csv(folder, rows)
         print(f"  Wrote {len(rows)} row(s) to {out_path}")
         return None
     if export == "excel":
         return excel_rows
-    af.print_summary_rows(rows)
+    fin.print_summary_rows(rows)
     return None
 
 
 def run_con_call(folder, config_path, export, verbose):
     rows, excel_rows = con_call_rows(folder, config_path, verbose)
     if export == "csv":
-        out_path = cf.write_summary_csv(folder, rows)
+        out_path = decks.write_summary_csv(folder, rows)
         print(f"  Wrote {len(rows)} row(s) to {out_path}")
         return None
     if export == "excel":
         return excel_rows
-    cf.print_summary_rows(rows)
+    decks.print_summary_rows(rows)
     return None
 
 
@@ -457,8 +457,8 @@ def main():
         print(f"\n=== {folder} ===")
         if kind is None:
             print(f"  Couldn't classify this folder (coded statement rows: {code_hits}, "
-                  f"con-call cover markers: {con_hits}) - skipping. Run acctfinder.py or "
-                  f"callfinder.py directly on it instead.")
+                  f"con-call cover markers: {con_hits}) - skipping. Run `cli.py acct` or "
+                  f"`cli.py call` on it instead.")
             continue
         if kind == "fin_report":
             print(f"  Detected: financial report ({code_hits} coded statement row(s) found)")
@@ -521,19 +521,19 @@ def main():
 # they already document keeps working and none of them needed touching.
 #
 # Dispatched by peeking at argv rather than with argparse subparsers, because
-# runfinder's own CLI takes a bare positional (`runfinder <folder> <folder>`)
+# cli's own CLI takes a bare positional (`cli <folder> <folder>`)
 # and adding subparsers around that would have changed the interface people
 # already use. A subcommand name is never a folder name, so the peek is
 # unambiguous; anything else falls through to the parser below untouched.
 _SUBCOMMANDS = {
-    "acct": ("financialReports.acctfinder", "per-statement / summary extraction from a filing"),
-    "call": ("earningsCalls.callfinder", "term extraction from an earnings-call deck"),
-    "npl": ("regulatorDatasets.npl_finder", "fetch the FSC 銀行局 monthly datasets"),
+    "acct": ("financialReports.statements", "per-statement / summary extraction from a filing"),
+    "call": ("earningsCalls.decks", "term extraction from an earnings-call deck"),
+    "npl": ("regulatorDatasets.disclosures", "fetch the FSC 銀行局 monthly datasets"),
 }
 
 
 def _dispatch(argv):
-    """Hand off to a package's own CLI, or return False to run runfinder's."""
+    """Hand off to a package's own CLI, or return False to run cli's."""
     if len(argv) < 2 or argv[1] not in _SUBCOMMANDS:
         return False
     module_name, _help = _SUBCOMMANDS[argv.pop(1)]

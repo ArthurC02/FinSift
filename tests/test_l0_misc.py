@@ -6,10 +6,13 @@ number rather than a crash.
 """
 import pytest
 
-from financialReports import acctfinder as af
-from regulatorDatasets import npl_finder as npl
-from userInteractions import runfinder as rf
-from earningsCalls.callfinder import _add, _sub
+import financialReports as fin
+from regulatorDatasets import disclosures
+from userInteractions import cli
+from earningsCalls.decks import _add, _sub
+from core.numbers import annualize, format_maybe_pct, format_pct, format_value
+from core.tables import _is_table_divider, _split_row
+from core.text import despace_cjk, page_num
 
 # --------------------------------------------------------------------------
 # §3.4 apply_cost_sign - Decision Table (6)
@@ -34,7 +37,7 @@ COST_SIGN_CASES = [
 @pytest.mark.parametrize("value,label,is_cost,expected", [c[1:] for c in COST_SIGN_CASES],
                          ids=[c[0] for c in COST_SIGN_CASES])
 def test_apply_cost_sign(value, label, is_cost, expected):
-    assert af.apply_cost_sign(value, label, is_cost) == expected
+    assert fin.apply_cost_sign(value, label, is_cost) == expected
 
 
 # --------------------------------------------------------------------------
@@ -52,7 +55,7 @@ DESPACE_CASES = [
 @pytest.mark.parametrize("text,expected", [c[1:] for c in DESPACE_CASES],
                          ids=[c[0] for c in DESPACE_CASES])
 def test_despace_cjk(text, expected):
-    assert af.despace_cjk(text) == expected
+    assert despace_cjk(text) == expected
 
 
 DIVIDER_CASES = [
@@ -68,7 +71,7 @@ DIVIDER_CASES = [
 @pytest.mark.parametrize("line,expected", [c[1:] for c in DIVIDER_CASES],
                          ids=[c[0] for c in DIVIDER_CASES])
 def test_is_table_divider(line, expected):
-    assert af._is_table_divider(line) is expected
+    assert _is_table_divider(line) is expected
 
 
 SPLIT_ROW_CASES = [
@@ -82,18 +85,18 @@ SPLIT_ROW_CASES = [
 @pytest.mark.parametrize("line,expected", [c[1:] for c in SPLIT_ROW_CASES],
                          ids=[c[0] for c in SPLIT_ROW_CASES])
 def test_split_row(line, expected):
-    assert af._split_row(line) == expected
+    assert _split_row(line) == expected
 
 
 FORMAT_CASES = [
-    ("value None", lambda: af.format_value(None), "N/A"),
-    ("value negative is comma-grouped", lambda: af.format_value(-327473468), "-327,473,468"),
-    ("value zero", lambda: af.format_value(0), "0"),
-    ("pct None", lambda: af.format_pct(None), "N/A"),
-    ("pct two decimals", lambda: af.format_pct(1.27), "1.27%"),
-    ("pct zero still gets decimals", lambda: af.format_pct(0), "0.00%"),
-    ("maybe_pct percent branch", lambda: af.format_maybe_pct(1.27, True), "1.27%"),
-    ("maybe_pct value branch", lambda: af.format_maybe_pct(1.27, False), "1.27"),
+    ("value None", lambda: format_value(None), "N/A"),
+    ("value negative is comma-grouped", lambda: format_value(-327473468), "-327,473,468"),
+    ("value zero", lambda: format_value(0), "0"),
+    ("pct None", lambda: format_pct(None), "N/A"),
+    ("pct two decimals", lambda: format_pct(1.27), "1.27%"),
+    ("pct zero still gets decimals", lambda: format_pct(0), "0.00%"),
+    ("maybe_pct percent branch", lambda: format_maybe_pct(1.27, True), "1.27%"),
+    ("maybe_pct value branch", lambda: format_maybe_pct(1.27, False), "1.27"),
 ]
 
 
@@ -114,7 +117,7 @@ ANNUALIZE_CASES = [
 @pytest.mark.parametrize("value,quarter,expected", [c[1:] for c in ANNUALIZE_CASES],
                          ids=[c[0] for c in ANNUALIZE_CASES])
 def test_annualize(value, quarter, expected):
-    assert af.annualize(value, quarter) == expected
+    assert annualize(value, quarter) == expected
 
 
 ADD_SUB_CASES = [
@@ -145,35 +148,35 @@ PAGE_NUM_CASES = [
 @pytest.mark.parametrize("source_file,expected", [c[1:] for c in PAGE_NUM_CASES],
                          ids=[c[0] for c in PAGE_NUM_CASES])
 def test_page_num(source_file, expected):
-    assert af.page_num(source_file) == expected
+    assert page_num(source_file) == expected
 
 
 def test_sheet_name_uses_the_folder_basename():
-    assert rf.sheet_name("C:/reports/中信 4Q25", set()) == "中信 4Q25"
+    assert cli.sheet_name("C:/reports/中信 4Q25", set()) == "中信 4Q25"
 
 
 def test_sheet_name_truncates_at_31_chars():
-    assert rf.sheet_name("C:/reports/" + "A" * 40, set()) == "A" * 31
+    assert cli.sheet_name("C:/reports/" + "A" * 40, set()) == "A" * 31
 
 
 def test_sheet_name_replaces_characters_excel_rejects():
-    assert rf.sheet_name("C:/reports/a:b?c*d[e]", set()) == "a_b_c_d_e_"
+    assert cli.sheet_name("C:/reports/a:b?c*d[e]", set()) == "a_b_c_d_e_"
 
 
 def test_sheet_name_deduplicates_against_taken():
     taken = set()
-    assert rf.sheet_name("C:/reports/deck", taken) == "deck"
-    assert rf.sheet_name("C:/reports/deck", taken) == "deck_2"
-    assert rf.sheet_name("C:/reports/deck", taken) == "deck_3"
+    assert cli.sheet_name("C:/reports/deck", taken) == "deck"
+    assert cli.sheet_name("C:/reports/deck", taken) == "deck_2"
+    assert cli.sheet_name("C:/reports/deck", taken) == "deck_3"
 
 
 GOV_UNIT_CASES = [
-    ("ROC year", lambda: npl.roc_year(2025), 114),
-    ("Q1 ends in March", lambda: npl.quarter_end_month(1), 3),
-    ("Q4 ends in December", lambda: npl.quarter_end_month(4), 12),
-    ("quarter 5 is not a quarter", lambda: npl.quarter_end_month(5), None),
-    ("千元 to 十億元", lambda: npl.thousands_to_billions(17911768), 17.911768),
-    ("thousands_to_billions is None-safe", lambda: npl.thousands_to_billions(None), None),
+    ("ROC year", lambda: disclosures.roc_year(2025), 114),
+    ("Q1 ends in March", lambda: disclosures.quarter_end_month(1), 3),
+    ("Q4 ends in December", lambda: disclosures.quarter_end_month(4), 12),
+    ("quarter 5 is not a quarter", lambda: disclosures.quarter_end_month(5), None),
+    ("千元 to 十億元", lambda: disclosures.thousands_to_billions(17911768), 17.911768),
+    ("thousands_to_billions is None-safe", lambda: disclosures.thousands_to_billions(None), None),
 ]
 
 

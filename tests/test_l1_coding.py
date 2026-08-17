@@ -7,8 +7,8 @@ wrong answer rather than by raising.
 """
 import pytest
 
-from financialReports import acctfinder as af
-from financialReports.acctfinder import _extract_coding_block, _find_coding_blocks, restrict_section
+import financialReports as fin
+from financialReports.statements import _extract_coding_block, _find_coding_blocks, restrict_section
 
 
 def md(*lines):
@@ -128,7 +128,7 @@ def test_K7_merged_cells_are_filled_into_every_member(tmp_path):
     path = _workbook(tmp_path,
                      [["修正後會計項目及代碼", None], ["10000", "資產"]],
                      merges=["A1:B1"])
-    assert af.load_code_dictionary(path, "balance_sheet") == {"10000": "資產"}
+    assert fin.load_code_dictionary(path, "balance_sheet") == {"10000": "資產"}
 
 
 def test_K8_revised_wins_over_original_on_conflict(tmp_path):
@@ -136,16 +136,16 @@ def test_K8_revised_wins_over_original_on_conflict(tmp_path):
         ["原會計項目及代碼", None, "修正後會計項目及代碼", None],
         ["10000", "舊名稱", "10000", "新名稱"],
     ])
-    assert af.load_code_dictionary(path, "balance_sheet")["10000"] == "新名稱"
+    assert fin.load_code_dictionary(path, "balance_sheet")["10000"] == "新名稱"
 
 
 def test_every_industry_coding_workbook_path_actually_resolves():
     """These are absolute paths built from __file__. When the table moved from
-    src/acctfinder.py to src/core/industry.py, the same
+    src/fin.py to src/core/industry.py, the same
     `__file__.parent.parent / "data"` silently started pointing at src/data/ -
     and nothing went red, because summary mode never opens a workbook and the
     per-statement tests all build their own. A path that resolves to nowhere
     is not a parsing bug; it is an unopenable file at the very first step."""
     from pathlib import Path
-    for industry, path in af.INDUSTRY_CODING_FILES.items():
+    for industry, path in fin.INDUSTRY_CODING_FILES.items():
         assert Path(path).is_file(), f"{industry}: {path}"

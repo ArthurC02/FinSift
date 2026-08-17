@@ -1,7 +1,7 @@
 """Which coding scheme a filing is written under.
 
 Down here rather than in an extractor because every layer needs it and none
-owns it: acctfinder picks a coding workbook with it, summary picks a layout
+owns it: statements picks a coding workbook with it, summary picks a layout
 and scopes entity detection with it. Same one-way core rule - nothing here
 imports an extractor.
 
@@ -9,7 +9,8 @@ imports an extractor.
 from pathlib import Path
 
 # data/ sits at the repo root - THREE levels up from src/core/, not two. This
-# table moved here from src/acctfinder.py, where two levels was correct; the
+# table moved here from what was then src/acctfinder.py (now
+# financialReports/statements.py), where two levels was correct; the
 # move silently pointed every coding-workbook path at src/data/ until this was
 # anchored explicitly. No test caught it, because summary mode never loads a
 # workbook - only the per-statement modes do.

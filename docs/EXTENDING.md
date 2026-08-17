@@ -13,7 +13,7 @@
 
 ### 只改一個地方
 
-`src/financialReports/acctfinder.py` 的 `BANK_PROFILES`：
+`src/financialReports/statements.py` 的 `BANK_PROFILES`：
 
 ```python
 "永豐": {
@@ -29,7 +29,7 @@
 },
 ```
 
-`BANKS`、`BANK_NAME_ALIASES`、`SUMMARY_CODE_OVERRIDES`、`SUMMARY_CODE_OVERRIDES_FINSUM`、`COMPOSITE_TERMS`、`callfinder.PRIMARY_BANK_ENTITIES` 全部自動跟上 —— **它們是推導視圖，不要手動編輯**。
+`BANKS`、`BANK_NAME_ALIASES`、`SUMMARY_CODE_OVERRIDES`、`SUMMARY_CODE_OVERRIDES_FINSUM`、`COMPOSITE_TERMS`、`decks.PRIMARY_BANK_ENTITIES` 全部自動跟上 —— **它們是推導視圖，不要手動編輯**。
 
 ### 每個欄位怎麼填
 
@@ -54,7 +54,7 @@
 
 ```bash
 python -m pytest                      # _validate_profiles 會在 import 時擋下不完整的 profile
-python src/userInteractions/runfinder.py acct <新機構資料夾> summary -v
+python src/userInteractions/cli.py acct <新機構資料夾> summary -v
 ```
 
 **必看**：輸出有沒有 `WARNING: N of M summary rows are N/A`。過半 N/A 代表解析沒讀懂這家的版面，不是這家沒揭露。
@@ -110,15 +110,15 @@ INDUSTRY_SUMMARY_LAYOUTS["保險業"] = [
 
 **④ 把機構的 `industries` 加上這個產業**，或新增該產業的機構 profile。`_validate_profiles` 會檢查每個機構都定義了它的 layout 需要的 composite。
 
-**⑤ 更新 `runfinder._MERGED_TERM_ORDER`**，若新 layout 的 term 要進合併輸出。
+**⑤ 更新 `cli._MERGED_TERM_ORDER`**，若新 layout 的 term 要進合併輸出。
 
 ### 驗證
 
 除了標準協定，另外要：
 
 ```bash
-python src/userInteractions/runfinder.py acct <新產業資料夾> summary -v      # 逐列看 matched_label 是否對得上
-python src/userInteractions/runfinder.py acct <新產業資料夾> balance_sheet   # 確認字典本身載得起來
+python src/userInteractions/cli.py acct <新產業資料夾> summary -v      # 逐列看 matched_label 是否對得上
+python src/userInteractions/cli.py acct <新產業資料夾> balance_sheet   # 確認字典本身載得起來
 ```
 
 **逐列核對 `matched_label`（文件自己的措辭）與 `term`（我們的標準化名稱）語意是否一致。** 這正是保險業那個 bug 的形狀：數字解析完全正確、標籤完全錯誤。
@@ -159,7 +159,7 @@ python src/userInteractions/runfinder.py acct <新產業資料夾> balance_sheet
 
 ```bash
 python -m pytest tests/test_l0_terms.py
-python src/userInteractions/runfinder.py call --folder <法說會資料夾> -v      # 看 matched_label 是不是預期那列
+python src/userInteractions/cli.py call --folder <法說會資料夾> -v      # 看 matched_label 是不是預期那列
 ```
 
 ---

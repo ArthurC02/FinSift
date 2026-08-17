@@ -10,8 +10,8 @@ actually CALLING each one, which is what this file does - all 9 lambdas across
 """
 import pytest
 
-from earningsCalls import callfinder
-from earningsCalls.callfinder import LOAN_RECOMPOSITION, TermSpec
+from earningsCalls import decks
+from earningsCalls.decks import LOAN_RECOMPOSITION, TermSpec
 
 # 十億元, roughly the magnitudes real decks print.
 RAW = {
@@ -75,7 +75,7 @@ def test_cathay_has_no_recomposition():
 # Reconciliation check (BVT on _LOAN_RECONCILE_TOLERANCE, which is `>`, not `>=`)
 # --------------------------------------------------------------------------
 
-ALL_TERMS = callfinder.RATIO_TERMS + callfinder.BALANCE_TERMS + callfinder.HELPER_TERMS
+ALL_TERMS = decks.RATIO_TERMS + decks.BALANCE_TERMS + decks.HELPER_TERMS
 
 
 def run_summary(monkeypatch, tmp_path, values, bank="國泰", gov_names=None):
@@ -84,19 +84,19 @@ def run_summary(monkeypatch, tmp_path, values, bank="國泰", gov_names=None):
     _GOV_BANK_NAMES is emptied by default so the regulator lookup can never
     reach the network - see TEST_DESIGN §6.4. An empty table is ALSO exactly
     the unmapped-entity state, so a test that needs a mapped entity passes
-    `gov_names` and stubs npl_finder's own network call instead.
+    `gov_names` and stubs disclosures's own network call instead.
     """
-    monkeypatch.setattr(callfinder, "_GOV_BANK_NAMES", gov_names or {})
-    monkeypatch.setattr(callfinder, "detect_con_call_quarter", lambda folder: 4)
-    monkeypatch.setattr(callfinder, "detect_con_call_year", lambda folder: 2025)
+    monkeypatch.setattr(decks, "_GOV_BANK_NAMES", gov_names or {})
+    monkeypatch.setattr(decks, "detect_con_call_quarter", lambda folder: 4)
+    monkeypatch.setattr(decks, "detect_con_call_year", lambda folder: 2025)
     monkeypatch.setattr(
-        callfinder, "find_term_value",
+        decks, "find_term_value",
         lambda folder, spec, **kw: (
             None if values.get(spec.name) is None
             else (spec.name, values[spec.name], "007_x.md", "4Q25", False, 1.0)),
     )
     terms = {name: TermSpec(name=name) for name in ALL_TERMS}
-    rows = callfinder.collect_con_call_summary(tmp_path, terms, bank=bank)
+    rows = decks.collect_con_call_summary(tmp_path, terms, bank=bank)
     return {r["term"]: r for r in rows}
 
 
@@ -179,11 +179,11 @@ def test_a_mapped_entity_whose_lookup_returns_nothing_is_not_called_unmapped(mon
     different fixes.
 
     The mapping is restored here, so the real regulator path DOES run - it is
-    npl_finder's own network call that is stubbed out (AGENTS.md: a run that
+    disclosures's own network call that is stubbed out (AGENTS.md: a run that
     truly reaches banking.gov.tw is a harness failure, not a result).
     """
-    from regulatorDatasets import npl_finder
-    monkeypatch.setattr(npl_finder, "_fetch_url",
+    from regulatorDatasets import disclosures
+    monkeypatch.setattr(disclosures, "_fetch_url",
                         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("network stubbed")))
     by_term = run_summary(monkeypatch, tmp_path, dict(BALANCED), bank="國泰",
                           gov_names={"國泰": "國泰世華商業銀行"})
@@ -195,4 +195,4 @@ def test_a_mapped_entity_whose_lookup_returns_nothing_is_not_called_unmapped(mon
 def test_every_gov_bank_name_key_is_a_real_entity():
     """A key that no longer matches a BANK_PROFILES name would silently never
     be looked up - _GOV_BANK_NAMES.get(bank) just returns None."""
-    assert set(callfinder._GOV_BANK_NAMES) <= set(callfinder.PRIMARY_BANK_ENTITIES)
+    assert set(decks._GOV_BANK_NAMES) <= set(decks.PRIMARY_BANK_ENTITIES)

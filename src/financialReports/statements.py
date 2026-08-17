@@ -12,7 +12,7 @@ found in that statement in one pass ("whole statement at once"), rather than
 one account per run.
 
 Usage:
-    python acctfinder.py <folder> <statement> --coding "Account Coding.xlsx" [--period 2024/12/31] [--export csv] [-v]
+    python statements.py <folder> <statement> --coding "Account Coding.xlsx" [--period 2024/12/31] [--export csv] [-v]
 
 <statement> is one of: balance_sheet, income_statement, cash_flow
 (the fourth sheet in the coding workbook, the equity statement / 權益變動表,
@@ -29,31 +29,16 @@ import sys
 from pathlib import Path
 from core.text import despace_cjk, _contains_any, _is_toc_like, page_num, strip_footnote, _strip_footnote_suffix
 from core.numbers import parse_numeric, nth_value, format_value, annualize, format_pct, format_maybe_pct
-# Re-exported, not re-implemented. acctfinder.py is the CLI plus the
-# per-statement dump; the summary/ratios/entity layers moved to their own
-# modules, but `acctfinder.X` stays the address every caller and test already
-# uses (runfinder, tools/ab.py, and the monkeypatch targets in
-# test_l1_coding.py all reach through here).
-from financialReports.entities import (BANK_PROFILES, BANKS, BANK_NAME_ALIASES, COMPOSITE_TERMS,
-                      SUMMARY_CODE_OVERRIDES, SUMMARY_CODE_OVERRIDES_FINSUM,
-                      SUMMARY_LABEL_FALLBACKS, SUMMARY_CODE_DERIVATIONS,
-                      _PROFILE_FIELDS, _invert_composites, resolve_bank_name,
-                      bank_candidates, detect_bank, bank_detection_message)
-from financialReports.ratios import (collect_roa_roe, collect_ratio_rows, compute_ratios,
-                    find_profitability_entries, find_profitability_files,
-                    extract_metrics, extract_single_entity_profitability_tables,
-                    extract_transposed_entity_tables, group_rows_by_entity,
-                    classify_metric_row, is_metric_column_layout, parse_single_date,
-                    parse_period_header_date, quarter_num_from_period_label,
-                    derive_quarter_num, _select_profitability_entry,
-                    print_ratio_rows, write_ratio_csv, RATIO_COLUMNS,
-                    _ROA_PLAUSIBLE_MIN, _ROA_PLAUSIBLE_MAX,
-                    _ROE_PLAUSIBLE_MIN, _ROE_PLAUSIBLE_MAX,
-                    _ROA_ROE_CROSSCHECK_DIVERGENCE_FACTOR)
-from financialReports.summary import (SUMMARY_LAYOUT, INDUSTRY_SUMMARY_LAYOUTS, summary_layout_error,
-                     apply_cost_sign, _validate_profiles, collect_summary_rows,
-                     collect_summary_rows_finsum, summary_coverage_warning,
-                     print_summary_rows, write_summary_csv, _SUMMARY_NA_WARN_RATIO)
+# What THIS module needs from its siblings - the CLI dispatches to all three
+# modes, and write_combined_csv emits the ratio columns alongside the
+# statement ones. Not a facade: the package __init__ is where the re-exports
+# live, so nothing here is imported merely to be re-exposed.
+from financialReports.entities import (BANKS, detect_bank, resolve_bank_name,
+                                       bank_detection_message)
+from financialReports.ratios import (RATIO_COLUMNS, collect_ratio_rows,
+                                     print_ratio_rows, write_ratio_csv)
+from financialReports.summary import (collect_summary_rows, summary_coverage_warning,
+                                      print_summary_rows, write_summary_csv)
 from core.industry import INDUSTRY_CODING_FILES, INDUSTRY_CATEGORY_KEYWORDS, detect_industry_category
 from core.lookup import find_value_by_label, find_code_value, build_code_index
 from core.tables import percent_stride_map, build_raw_lines, _split_dual_column_tables, restrict_section, _is_table_divider, _split_row, _looks_like_code, group_rows_by_code, parse_pipe_tables

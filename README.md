@@ -8,14 +8,14 @@
 
 ```
 account_code_finder/
-├── src/       acctfinder.py  callfinder.py  runfinder.py  npl_finder.py
+├── src/       statements.py  decks.py  cli.py  disclosures.py
 ├── data/      金控業.xlsx  金融業.xlsx  保險業.xlsx  con_call_terms.json
 ├── docs/      HANDOFF.md（交接手冊）  con_call_terms_example.json（詞彙設定檔範例）
 └── archive/   Account Coding.xlsx（已被 3 本產業活頁簿取代）
               build_manual_excel.py / build_fictional_excel.py（一次性的 Excel 產生腳本）
 ```
 
-現在只有一個進入點：`src/userInteractions/runfinder.py`。不帶子命令就是自動分類＋合併輸出；帶 `acct` / `call` / `npl` 則轉給對應套件原本的 CLI，旗標完全不變（例如 `python src/userInteractions/runfinder.py acct <folder> summary`）。`data/` 裡的檔案是用 `Path(__file__).resolve().parent.parent.parent` 從 repo 根目錄定位的（模組移進套件後多了一層），所以從別的工作目錄、用絕對路徑呼叫也一定找得到。`archive/` 裡的東西不在任何執行路徑上，純粹留著備查。金管會資料集的下載快取會落在 repo 根目錄的 `npl_cache/`（已列入 `.gitignore`）。
+現在只有一個進入點：`src/userInteractions/cli.py`。不帶子命令就是自動分類＋合併輸出；帶 `acct` / `call` / `npl` 則轉給對應套件原本的 CLI，旗標完全不變（例如 `python src/userInteractions/cli.py acct <folder> summary`）。`data/` 裡的檔案是用 `Path(__file__).resolve().parent.parent.parent` 從 repo 根目錄定位的（模組移進套件後多了一層），所以從別的工作目錄、用絕對路徑呼叫也一定找得到。`archive/` 裡的東西不在任何執行路徑上，純粹留著備查。金管會資料集的下載快取會落在 repo 根目錄的 `npl_cache/`（已列入 `.gitignore`）。
 
 ## 依產業分類的科目代碼字典（金控業 / 金融業 / 保險業）
 
@@ -36,13 +36,13 @@ account_code_finder/
 1. **`balance_sheet`/`income_statement`/`cash_flow` 曾經對這份申報文件回傳零列結果。** 它實際使用的轉檔工具，把每張報表拆成獨立檔案時，**沒有在資料頁本身重複該報表的標題**（標題只出現在目錄裡，以及其他地方不相關的註腳提及）——導致 `restrict_section` 原本假設一定找得到的標記需求，在整個資料夾裡全部悄悄失敗。`extract_statement` 現在改成：找不到章節標記時，改成**不設限地掃描整份檔案**，而不是直接跳過該檔案——因為比對本身是精確代碼相等，不是鬆散的文字搜尋，所以這樣做是安全的。
 2. **`Account Coding.xlsx` 損益表分頁裡一個只有空白字元的代碼儲存格**，逃過了「是否為空白」的檢查，被當成一個空字串的字典鍵值載入，導致文件裡任何「第一格是空白」的間隔列（例如一個「負債」區段的分隔列）都被誤判命中。`load_code_dictionary` 現在會先去除代碼的空白字元再檢查是否為空，`group_rows_by_code` 也加了一層防護，絕不會把空白標籤當成命中——屬於縱深防禦。
 
-## 法說會詞彙搜尋（`callfinder.py`）
+## 法說會詞彙搜尋（`decks.py`）
 
-`acctfinder.py` 是給季度財務報告（有代碼的會計科目項目）用的。
-`callfinder.py` 是**另一個獨立的進入點**，給法人說明會（法說會）逐字稿用，它的用詞完全不同（例如 NIM、存放利差、逾放比），也沒有綁定固定代碼——你要根據自己在掃描的是哪一種 `.md` 檔案，明確選擇執行其中一支程式。
+`statements.py` 是給季度財務報告（有代碼的會計科目項目）用的。
+`decks.py` 是**另一個獨立的進入點**，給法人說明會（法說會）逐字稿用，它的用詞完全不同（例如 NIM、存放利差、逾放比），也沒有綁定固定代碼——你要根據自己在掃描的是哪一種 `.md` 檔案，明確選擇執行其中一支程式。
 
 ```
-python src/userInteractions/runfinder.py call <term> --folder <folder> --config data/con_call_terms.json [--export csv] [-v]
+python src/userInteractions/cli.py call <term> --folder <folder> --config data/con_call_terms.json [--export csv] [-v]
 ```
 
 **詞彙比對分兩層**，依照 `Bank_Term_Weighted_Decomposition.xlsx`（`con_call_terms.json` 就是從這份原始字典產生的——共32個詞彙，涵蓋 NIM、存放利差/放款均率/存款均率、存放比、逾放比/逾期放款覆蓋率、CIR、企業放款/房貸/個人放款/信用卡循環/其他放款、法說會放款餘額合計/法說會外幣放款、總資產/淨收益/利息淨收益/手續費淨收益/評價及已實現/其他非利息收益、營業費用/員工福利費用/折舊及攤銷費用/其他費用/呆帳提存(沖回)、稅前淨利/所得稅費用/稅後淨利、ROA(稅後年化)/ROE(稅後年化)、活存比(餘額))：
@@ -55,7 +55,7 @@ python src/userInteractions/runfinder.py call <term> --folder <folder> --config 
 **數值抽取是「感知表頭、自動判斷方向」的，不是靠位置**——已對照一份真實的52頁法說會簡報（國泰世華銀行 4Q25 法人說明會）驗證過，顯示法說會投影片的表格至少有兩種不同形狀，有時候同一頁還會混用兩種：
 
 - **`row_period`（列為期間）**：每一資料列是一個期間（`FY24`、`FY25`……），表頭把每個指標各自命名成一欄（例如一張放款結構表，`企業放款` 後面緊接著一個獨立的 `企業放款占比` 百分比欄）。
-- **`col_period`（欄為期間）**：每一資料列是一個指標/實體，表頭把每個期間各自命名成一欄——跟 `acctfinder.py` 裡為玉山金控「獲利能力」表格建立的形狀相同。
+- **`col_period`（欄為期間）**：每一資料列是一個指標/實體，表頭把每個期間各自命名成一欄——跟 `statements.py` 裡為玉山金控「獲利能力」表格建立的形狀相同。
 
 方向是逐表自動偵測的（某一軸多數的儲存格能被解析成期間標籤——`parse_period_label` 能處理 `FY25`、`4Q25`、`1H25`、`9M25`，以及同一張表裡混雜不同顆粒度的情況），混雜在真正期間欄位之間的非期間欄位（例如一個 `FY25/FY24 % Chg` 成長率欄、一個 `企業放款占比` 占比欄）會被排除，不會被誤判成真正的期間欄。另外還對照那份真實簡報驗證了兩件事：
 
@@ -65,18 +65,18 @@ python src/userInteractions/runfinder.py call <term> --folder <folder> --config 
 ### 精選摘要（預設模式）
 
 ```
-python src/userInteractions/runfinder.py call [summary] --folder <folder> --config data/con_call_terms.json [--export csv] [-v]
+python src/userInteractions/cli.py call [summary] --folder <folder> --config data/con_call_terms.json [--export csv] [-v]
 ```
 
-不帶 `<term>`（或明確帶 `summary`）執行時，只回報一組固定、跟業務相關的子集——**不是**完整的32詞字典，因為其中好幾個詞彙（總資產、淨收益、稅前/稅後淨利、ROA/ROE 等）在概念上跟 `acctfinder.py` 的財報抽取重疊，不希望出現在法說會的輸出裡：
+不帶 `<term>`（或明確帶 `summary`）執行時，只回報一組固定、跟業務相關的子集——**不是**完整的32詞字典，因為其中好幾個詞彙（總資產、淨收益、稅前/稅後淨利、ROA/ROE 等）在概念上跟 `statements.py` 的財報抽取重疊，不希望出現在法說會的輸出裡：
 
-- **比率類詞彙**（`NIM`、`存放比`、`放款均率`、`存款均率`、`CIR`）——每個都回報**兩個**數字，分開命名：`(單季)` 是文件裡直接找到的最新一季數值，`(年化)` 是把那個數值年化後的結果（× 4/季數，季別的自動偵測方式跟 `acctfinder.py` 的 `ratios` 相同）。`CIR` 不是直接比對來的——是用 `abs(營業費用) / 淨收益 × 100` 算出來的，使用這兩個詞彙各自比對到的值。
+- **比率類詞彙**（`NIM`、`存放比`、`放款均率`、`存款均率`、`CIR`）——每個都回報**兩個**數字，分開命名：`(單季)` 是文件裡直接找到的最新一季數值，`(年化)` 是把那個數值年化後的結果（× 4/季數，季別的自動偵測方式跟 `statements.py` 的 `ratios` 相同）。`CIR` 不是直接比對來的——是用 `abs(營業費用) / 淨收益 × 100` 算出來的，使用這兩個詞彙各自比對到的值。
 - **餘額類詞彙**（`企業放款`、`房貸`、`個人放款`、`信用卡循環`、`其他放款`、`法說會放款餘額合計`、`法說會外幣放款`）——期末放款餘額（存量,不是流量），所以只回報最新一季的數值，沒有年化數字。
 - 每個詞彙只查找**一次**——取整個資料夾裡找到的最強單一命中（見上文），不會把每次出現都累加起來，所以一個詞彙出現在好幾頁時，輸出裡不會重複。
 
-**關於「年化」數字的注意事項**：對於像 NIM 這種「流量除以餘額」的比率，× 4/季數在數學上是合理的（跟 `acctfinder.py` 的 ROA/ROE 邏輯相同）。但對於 `存放比`（兩個期末餘額的比率，不是流量）跟 `CIR`（兩個累計流量的比率，年化係數理應在分子分母之間互相抵銷），年化後的數字並不具備相同的真實經濟意義——這兩項請以 `individual`/`單季` 數值為準。
+**關於「年化」數字的注意事項**：對於像 NIM 這種「流量除以餘額」的比率，× 4/季數在數學上是合理的（跟 `statements.py` 的 ROA/ROE 邏輯相同）。但對於 `存放比`（兩個期末餘額的比率，不是流量）跟 `CIR`（兩個累計流量的比率，年化係數理應在分子分母之間互相抵銷），年化後的數字並不具備相同的真實經濟意義——這兩項請以 `individual`/`單季` 數值為準。
 
-**現況**：已對照一份真實的52頁法說會簡報（國泰世華銀行 4Q25 法人說明會）驗證。**12個精選詞彙裡有10個正確抽取**，已對照原始 `.md` 檔案人工逐一核對：`NIM`、`存放比`、`放款均率`、`存款均率`、`CIR`、`企業放款`、`房貸`、`個人放款`、`法說會放款餘額合計`、`法說會外幣放款`。另外兩項顯示 `N/A` 是有真實原因的，不是 bug：`其他放款` 在這份簡報裡確實完全不存在（它的放款結構表只拆分出4個分類），而 `信用卡循環`（循環信用餘額，特指*循環*餘額）刻意**不**去比對 `信用卡放款`（信用卡放款總額，一個不同且範圍更廣的數字，已確認）——這份簡報裡別的地方也不存在真正的循環餘額數字。原始規格書裡提到的上下文關鍵字加權、嵌入向量相似度、字元袋比對，都刻意先不做，當作未經驗證的精進項目——規格書本身也註明它的門檻值（0.8）「是一個起始假設，不是量測出來的數值」。隨著更多簡報（其他銀行、其他季度）被檢查，應該持續重新驗證，就像 `acctfinder.py` 的科目代碼抽取當初也是對照國泰/玉山金控/北富銀的資料逐步精進出來的一樣。
+**現況**：已對照一份真實的52頁法說會簡報（國泰世華銀行 4Q25 法人說明會）驗證。**12個精選詞彙裡有10個正確抽取**，已對照原始 `.md` 檔案人工逐一核對：`NIM`、`存放比`、`放款均率`、`存款均率`、`CIR`、`企業放款`、`房貸`、`個人放款`、`法說會放款餘額合計`、`法說會外幣放款`。另外兩項顯示 `N/A` 是有真實原因的，不是 bug：`其他放款` 在這份簡報裡確實完全不存在（它的放款結構表只拆分出4個分類），而 `信用卡循環`（循環信用餘額，特指*循環*餘額）刻意**不**去比對 `信用卡放款`（信用卡放款總額，一個不同且範圍更廣的數字，已確認）——這份簡報裡別的地方也不存在真正的循環餘額數字。原始規格書裡提到的上下文關鍵字加權、嵌入向量相似度、字元袋比對，都刻意先不做，當作未經驗證的精進項目——規格書本身也註明它的門檻值（0.8）「是一個起始假設，不是量測出來的數值」。隨著更多簡報（其他銀行、其他季度）被檢查，應該持續重新驗證，就像 `statements.py` 的科目代碼抽取當初也是對照國泰/玉山金控/北富銀的資料逐步精進出來的一樣。
 
 ## 安裝設定
 
@@ -87,7 +87,7 @@ pip install openpyxl
 ## 使用方式
 
 ```
-python src/userInteractions/runfinder.py acct <folder> <statement> [--coding <path>] [--period N] [--export csv] [-v]
+python src/userInteractions/cli.py acct <folder> <statement> [--coding <path>] [--period N] [--export csv] [-v]
 ```
 
 - `<folder>`：要掃描的 `.md` 檔案資料夾（會遞迴搜尋子資料夾）。只有真正包含目標報表章節標題的檔案才會被掃描——其他檔案會被跳過。
@@ -106,7 +106,7 @@ python src/userInteractions/runfinder.py acct <folder> <statement> [--coding <pa
 ## ROA / ROE
 
 ```
-python src/userInteractions/runfinder.py acct <folder> ratios [--coding <path>] [--export csv] [-v]
+python src/userInteractions/cli.py acct <folder> ratios [--coding <path>] [--export csv] [-v]
 ```
 
 **主要來源：申報機構自己揭露的獲利能力表格。** 台灣的金控申報文件會直接揭露 ROA/ROE——資產報酬率（ROA）和淨值報酬率（ROE），各自拆成稅前/稅後,加上純益率，涵蓋合併集團跟每個子公司，同時有本期跟去年同期。只會顯示**稅後**數字（稅前會從輸出中拿掉，但內部仍會解析以維持欄位位置正確）。因為揭露的數字是年初至今的累計數——不是年化的——所以會同時顯示原始揭露數字跟一個年化版本（× 4/季數）。輸出格式是每個 (期間, 實體) 一列：`period | entity | quarter | roa_posttax | roa_posttax_annualized | roe_posttax | roe_posttax_annualized | profit_margin | source_file`。`N/A` 代表該指標在申報文件裡顯示為 `-`（該實體/期間沒有揭露）。使用官方揭露表格時，`--export csv` 會寫出 `profitability_export.csv`。
@@ -126,7 +126,7 @@ python src/userInteractions/runfinder.py acct <folder> ratios [--coding <path>] 
 ## 全部報表＋比率一起執行
 
 ```
-python src/userInteractions/runfinder.py acct <folder> all [--coding <path>] [--export csv] [-v]
+python src/userInteractions/cli.py acct <folder> all [--coding <path>] [--export csv] [-v]
 ```
 
 一次執行 `balance_sheet`、`income_statement`、`cash_flow`、`ratios`。
@@ -139,7 +139,7 @@ python src/userInteractions/runfinder.py acct <folder> all [--coding <path>] [--
 ## 精選銀行別摘要（`summary`）
 
 ```
-python src/userInteractions/runfinder.py acct <folder> summary [--bank 國泰] [--export csv] [-v]
+python src/userInteractions/cli.py acct <folder> summary [--bank 國泰] [--export csv] [-v]
 ```
 
 一組固定、精選的特定代碼，加上兩個複合/衍生詞彙，用於跨銀行比較（國泰、中信、北富銀、玉山）——`--bank` 決定套用哪家銀行專屬的代碼覆寫跟公式。`--bank` 可以用簡稱或完整的替代名稱（例如 `北富銀` 跟 `台北富邦銀行`/`臺北富邦銀行` 是等價的）；完全不指定的話，會自動掃描資料夾裡第一個 `.md` 檔（通常是封面頁）尋找任何一家銀行的名稱來偵測。如果明確指定的 `--bank` 跟自動偵測都無法判斷銀行，工具會直接報錯，而不是用猜的。跟上面整份報表傾印模式不同的地方：
@@ -173,7 +173,7 @@ python src/userInteractions/runfinder.py acct <folder> summary [--bank 國泰] [
 
 輸出/匯出的欄位排版是 `term | value | term_found | page`——刻意不顯示代碼數字本身，只顯示標準化詞彙、文件自己的措辭，以及頁碼。
 
-> **中文版譯註（本次交接時補充，反映目前程式碼實際狀態，英文原版未更新）**：以上這份 `summary` 相關敘述、以及後面法說會 CIR 段落的內容，**部分已經跟目前 `acctfinder.py`/`callfinder.py` 的實際程式碼行為不一致**——例如 `手續費淨收益`（代碼 `49100`）跟 `其他非利息收益` 這兩項現在**已經重新加回輸出**；`CIR` 已經整個從法說會（`callfinder.py`）搬到財報端（`acctfinder.py`），改成不做交叉驗證、直接用 `abs(營業費用)/淨收益` 計算；法說會端的 `存放比`、`逾期放款總額` 已依指示從輸出中移除；新增了 `活存比`（目前四家銀行都還沒揭露，固定顯示 N/A）；法說會端新增了兩個從金管會網站抓的欄位「逾放比率」「備抵呆帳/逾期放款」。**這份 README 的英文原版內容偏舊，如果內容跟實際程式行為衝突，請以程式碼本身、或 `docs/HANDOFF.md` 交接手冊為準。**
+> **中文版譯註（本次交接時補充，反映目前程式碼實際狀態，英文原版未更新）**：以上這份 `summary` 相關敘述、以及後面法說會 CIR 段落的內容，**部分已經跟目前 `statements.py`/`decks.py` 的實際程式碼行為不一致**——例如 `手續費淨收益`（代碼 `49100`）跟 `其他非利息收益` 這兩項現在**已經重新加回輸出**；`CIR` 已經整個從法說會（`decks.py`）搬到財報端（`statements.py`），改成不做交叉驗證、直接用 `abs(營業費用)/淨收益` 計算；法說會端的 `存放比`、`逾期放款總額` 已依指示從輸出中移除；新增了 `活存比`（目前四家銀行都還沒揭露，固定顯示 N/A）；法說會端新增了兩個從金管會網站抓的欄位「逾放比率」「備抵呆帳/逾期放款」。**這份 README 的英文原版內容偏舊，如果內容跟實際程式行為衝突，請以程式碼本身、或 `docs/HANDOFF.md` 交接手冊為準。**
 
 ## 限制：不支援權益變動表
 
@@ -192,7 +192,7 @@ python src/userInteractions/runfinder.py acct <folder> summary [--bank 國泰] [
 
 ## 最終驗證回合（四家銀行，2025年第四季簡報）
 
-`runfinder.py` 已對照四家銀行真實的4Q25法人說明會簡報（國泰／中信／玉山／富邦）驗證過。每一個抽取出來的數值都用**獨立**的表格解析器（不是 `callfinder` 自己那套）重新核對過,確認每個數字確實落在「標籤×期間」交叉點上；計算出來的CIR也手動重新推算過，並對照每份簡報自己揭露的成本收入比核對（有揭露的情況下）（中信 54.0%、富邦 −53.20%、玉山全年 47.7%）。
+`cli.py` 已對照四家銀行真實的4Q25法人說明會簡報（國泰／中信／玉山／富邦）驗證過。每一個抽取出來的數值都用**獨立**的表格解析器（不是 `decks` 自己那套）重新核對過,確認每個數字確實落在「標籤×期間」交叉點上；計算出來的CIR也手動重新推算過，並對照每份簡報自己揭露的成本收入比核對（有揭露的情況下）（中信 54.0%、富邦 −53.20%、玉山全年 47.7%）。
 
 這一輪驗證發現並修正的 bug：
 
@@ -228,16 +228,16 @@ authoritative code-to-account mapping instead of needing fuzzy keyword matching.
 
 ```
 account_code_finder/
-├── src/       acctfinder.py  callfinder.py  runfinder.py  npl_finder.py
+├── src/       statements.py  decks.py  cli.py  disclosures.py
 ├── data/      金控業.xlsx  金融業.xlsx  保險業.xlsx  con_call_terms.json
 ├── docs/      HANDOFF.md (handover manual)  con_call_terms_example.json (term-config sample)
 └── archive/   Account Coding.xlsx (superseded by the 3 industry workbooks)
               build_manual_excel.py / build_fictional_excel.py (one-off Excel generators)
 ```
 
-All four scripts are run from the repo root, e.g. `python src/userInteractions/runfinder.py acct <folder> summary`.
+All four scripts are run from the repo root, e.g. `python src/userInteractions/cli.py acct <folder> summary`.
 Files under `data/` are located via `Path(__file__).resolve().parent.parent.parent` - three levels up from `src/<package>/`, not two, since the modules moved into packages. So invoking a script by
-absolute path from any working directory (`python C:\...\src/userInteractions/runfinder.py`) still resolves them.
+absolute path from any working directory (`python C:\...\src/userInteractions/cli.py`) still resolves them.
 Nothing in `archive/` is on any execution path — it is kept for reference only. The FSC dataset
 download cache lands in `npl_cache/` at the repo root (already in `.gitignore`).
 
@@ -295,15 +295,15 @@ Tested against the same real 北富銀 filing above, which surfaced two bugs sin
    `load_code_dictionary` now strips a code before checking whether it's blank, and
    `group_rows_by_code` guards against ever matching an empty label as defense in depth.
 
-## Earnings-call term search (`callfinder.py`)
+## Earnings-call term search (`decks.py`)
 
-`acctfinder.py` is for quarterly financial reports (coded account line items).
-`callfinder.py` is a **separate entry point** for earnings-call (法說會) transcripts, whose
+`statements.py` is for quarterly financial reports (coded account line items).
+`decks.py` is a **separate entry point** for earnings-call (法說會) transcripts, whose
 vocabulary is completely different (e.g. NIM, 存放利差, 逾放比) and isn't tied to a fixed code —
 you explicitly run one script or the other depending on which kind of `.md` files you're scanning.
 
 ```
-python src/userInteractions/runfinder.py call <term> --folder <folder> --config data/con_call_terms.json [--export csv] [-v]
+python src/userInteractions/cli.py call <term> --folder <folder> --config data/con_call_terms.json [--export csv] [-v]
 ```
 
 **Term matching is two-layer**, per `Bank_Term_Weighted_Decomposition.xlsx` (the source dictionary
@@ -338,7 +338,7 @@ tables come in at least two different shapes, sometimes both on the same page:
   metric as its own column (e.g. a loan-structure table with `企業放款` and a separate
   `企業放款占比` percentage column right after it).
 - **`col_period`**: each data row is one metric/entity, and the header names each period as its own
-  column — the same shape built for 玉山金控's 獲利能力 table in `acctfinder.py`.
+  column — the same shape built for 玉山金控's 獲利能力 table in `statements.py`.
 
 Orientation is auto-detected per table (majority of one axis's cells parsing as period labels -
 `parse_period_label` handles `FY25`, `4Q25`, `1H25`, `9M25`, mixed granularity in the same table),
@@ -361,18 +361,18 @@ that real deck:
 ### Curated summary (default mode)
 
 ```
-python src/userInteractions/runfinder.py call [summary] --folder <folder> --config data/con_call_terms.json [--export csv] [-v]
+python src/userInteractions/cli.py call [summary] --folder <folder> --config data/con_call_terms.json [--export csv] [-v]
 ```
 
 Running with no `<term>` (or explicitly `summary`) reports only a fixed, business-relevant subset
 — **not** the full 32-term dictionary, since several of those terms (總資產, 淨收益, 稅前/稅後淨利,
-ROA/ROE, etc.) conceptually overlap with `acctfinder.py`'s financial-report extraction and
+ROA/ROE, etc.) conceptually overlap with `statements.py`'s financial-report extraction and
 aren't wanted in con-call output:
 
 - **Ratio terms** (`NIM`, `存放比`, `放款均率`, `存款均率`, `CIR`) — each reports **two** figures,
   named separately: `(單季)` the latest-quarter value as directly found in the document, and
   `(年化)` that value annualized (× 4/quarter number, quarter auto-detected the same way as
-  `acctfinder.py`'s `ratios`). `CIR` isn't matched directly — it's computed as
+  `statements.py`'s `ratios`). `CIR` isn't matched directly — it's computed as
   `abs(營業費用) / 淨收益 × 100`, using those two terms' own matched values.
 - **Balance terms** (`企業放款`, `房貸`, `個人放款`, `信用卡循環`, `其他放款`,
   `法說會放款餘額合計`, `法說會外幣放款`) — period-end loan balances (stock, not flow), so only
@@ -382,7 +382,7 @@ aren't wanted in con-call output:
   repeated in the output.
 
 **Caveat on the `年化` figure**: `× 4/quarter#` is mathematically sound for a flow-over-balance
-ratio like NIM (same logic as `acctfinder.py`'s ROA/ROE). For `存放比` (a ratio of two
+ratio like NIM (same logic as `statements.py`'s ROA/ROE). For `存放比` (a ratio of two
 period-end balances, not a flow) and `CIR` (a ratio of two cumulative flows, where the
 annualization factor should actually cancel between numerator and denominator), the annualized
 figure doesn't carry the same real economic meaning — treat `individual`/`單季` as authoritative
@@ -399,7 +399,7 @@ revolving-balance figure exists elsewhere in this deck. Context-keyword boosting
 similarity, and bag-of-characters matching (mentioned in the source spec) were intentionally left
 out as unvalidated refinements — the spec itself notes its threshold (0.8) is "a starting
 assumption, not a measured value." Re-verify further as more decks (other banks, other quarters)
-are checked, the same way `acctfinder.py`'s account-code extraction was refined against Cathay/
+are checked, the same way `statements.py`'s account-code extraction was refined against Cathay/
 玉山金控/北富銀 data.
 
 ## Setup
@@ -411,7 +411,7 @@ pip install openpyxl
 ## Usage
 
 ```
-python src/userInteractions/runfinder.py acct <folder> <statement> [--coding <path>] [--period N] [--export csv] [-v]
+python src/userInteractions/cli.py acct <folder> <statement> [--coding <path>] [--period N] [--export csv] [-v]
 ```
 
 - `<folder>`: folder of `.md` files to scan (searched recursively). Only files that actually
@@ -448,7 +448,7 @@ the target period's value is just the Nth comma-grouped number found in that row
 ## ROA / ROE
 
 ```
-python src/userInteractions/runfinder.py acct <folder> ratios [--coding <path>] [--export csv] [-v]
+python src/userInteractions/cli.py acct <folder> ratios [--coding <path>] [--export csv] [-v]
 ```
 
 **Primary source: the filer's own reported 獲利能力 (profitability) table.** Taiwanese financial
@@ -490,7 +490,7 @@ number is parsed from the ROC-calendar date in the balance sheet page's title (e
 ## All statements + ratios together
 
 ```
-python src/userInteractions/runfinder.py acct <folder> all [--coding <path>] [--export csv] [-v]
+python src/userInteractions/cli.py acct <folder> all [--coding <path>] [--export csv] [-v]
 ```
 
 Runs `balance_sheet`, `income_statement`, `cash_flow`, and `ratios` in one pass.
@@ -510,7 +510,7 @@ layout, or the underlying figures behind the manual fallback).
 ## Curated per-bank summary (`summary`)
 
 ```
-python src/userInteractions/runfinder.py acct <folder> summary [--bank 國泰] [--export csv] [-v]
+python src/userInteractions/cli.py acct <folder> summary [--bank 國泰] [--export csv] [-v]
 ```
 
 A fixed, curated set of specific codes plus two composite/derived terms, for cross-bank
@@ -592,9 +592,9 @@ not imported, to keep the two projects independent).
 
 ## Final verification pass (all four banks, 2025 Q4 decks)
 
-`runfinder.py` was validated against all four banks' real 4Q25 analyst-meeting decks
+`cli.py` was validated against all four banks' real 4Q25 analyst-meeting decks
 (國泰 / 中信 / 玉山 / 富邦). Every extracted value was re-checked with an **independent**
-table parser (not `callfinder`'s own), confirming each figure sits at the reported
+table parser (not `decks`'s own), confirming each figure sits at the reported
 label × period intersection; computed CIRs were re-derived by hand and cross-checked
 against each deck's own disclosed cost-income ratio where one exists
 (中信 54.0%, 富邦 −53.20%, 玉山 annual 47.7%).

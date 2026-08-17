@@ -29,10 +29,10 @@
 1. 專案是什麼、為什麼存在
 2. 系統整體架構
 3. 核心觀念
-4. `acctfinder.py` 逐項細節（財報抓取）
-5. `callfinder.py` 逐項細節（法說會抓取）
-6. `npl_finder.py` 逐項細節（金管會網站抓取）
-7. `runfinder.py` 逐項細節（整合執行 + Excel 匯出）
+4. `statements.py` 逐項細節（財報抓取）
+5. `decks.py` 逐項細節（法說會抓取）
+6. `disclosures.py` 逐項細節（金管會網站抓取）
+7. `cli.py` 逐項細節（整合執行 + Excel 匯出）
 8. `con_call_terms.json` 結構與新增詞彙教學
 9. 環境需求與執行總整理
 10. 已知限制與「遇到這些狀況該怎麼辦」
@@ -70,11 +70,11 @@
 
 | 檔案 | 角色 |
 |---|---|
-| `acctfinder.py` | 財報抓取主程式（代碼比對） |
-| `callfinder.py` | 法說會抓取主程式（關鍵字比對） |
-| `npl_finder.py` | 金管會網站抓取（獨立小模組） |
-| `runfinder.py` | 整合執行器（自動判斷資料夾種類 + 合併匯出 Excel） |
-| `con_call_terms.json` | 法說會關鍵字字典（callfinder.py 讀取） |
+| `statements.py` | 財報抓取主程式（代碼比對） |
+| `decks.py` | 法說會抓取主程式（關鍵字比對） |
+| `disclosures.py` | 金管會網站抓取（獨立小模組） |
+| `cli.py` | 整合執行器（自動判斷資料夾種類 + 合併匯出 Excel） |
+| `con_call_terms.json` | 法說會關鍵字字典（decks.py 讀取） |
 | `con_call_terms_example.json` | 極簡範例字典（只給人看格式，不影響實際執行） |
 | `金控業.xlsx` / `金融業.xlsx` / `保險業.xlsx` | 官方會計科目代碼對照表 |
 | `Account Coding.xlsx` | 早期/備用的科目代碼檔（可用 `--coding` 指定） |
@@ -84,11 +84,11 @@
 **資料流向：**
 
 ```
-財報 .md 資料夾 → acctfinder.py（代碼比對 + 科目字典）→ 財報摘要 rows
-法說會 .md 資料夾 → callfinder.py（關鍵字比對 + con_call_terms.json）→ 法說會摘要 rows
+財報 .md 資料夾 → statements.py（代碼比對 + 科目字典）→ 財報摘要 rows
+法說會 .md 資料夾 → decks.py（關鍵字比對 + con_call_terms.json）→ 法說會摘要 rows
                         │
-                        └─ 缺信用卡循環/逾放比率等 → npl_finder.py → 金管會網站即時抓取
-runfinder.py：自動判斷兩個資料夾各是財報還是法說會，各自呼叫上面兩支程式，
+                        └─ 缺信用卡循環/逾放比率等 → disclosures.py → 金管會網站即時抓取
+cli.py：自動判斷兩個資料夾各是財報還是法說會，各自呼叫上面兩支程式，
               可合併輸出成一份 Excel（含千分位、百分比格式）
 ```
 
@@ -99,8 +99,8 @@ runfinder.py：自動判斷兩個資料夾各是財報還是法說會，各自�
 ## 3. 核心觀念
 
 ### 3.1 兩種比對哲學
-- **`acctfinder.py`（財報）：精確代碼比對。** 找第一欄等於官方代碼的列，幾乎不會抓錯，除非代碼本身找不到（見 3.2）。
-- **`callfinder.py`（法說會）：加權關鍵字比對，三層強度：**
+- **`statements.py`（財報）：精確代碼比對。** 找第一欄等於官方代碼的列，幾乎不會抓錯，除非代碼本身找不到（見 3.2）。
+- **`decks.py`（法說會）：加權關鍵字比對，三層強度：**
   1. 強度3：整段文字完全等於某別名
   2. 強度2：文字裡包含某別名（子字串）
   3. 強度1：composite 型，加權分數 ≥ threshold
@@ -111,20 +111,20 @@ runfinder.py：自動判斷兩個資料夾各是財報還是法說會，各自�
 
 ### 3.3 期間判斷
 財報：`period` 參數（1=當期，2=上期），日期格式主要是民國年（「114年12月31日」或「114.12.31」）。
-法說會：格式更多樣（`4Q25`/`FY25`/`1H25`/`9M25`/`Dec 25`/`Dec-25`/`2025.12`），常常混用，邏輯集中在 `callfinder.py` 的 `parse_period_label()` 與相關正規表示式常數。**抓錯期間時第一個該查的地方。**
+法說會：格式更多樣（`4Q25`/`FY25`/`1H25`/`9M25`/`Dec 25`/`Dec-25`/`2025.12`），常常混用，邏輯集中在 `decks.py` 的 `parse_period_label()` 與相關正規表示式常數。**抓錯期間時第一個該查的地方。**
 
 ### 3.4 單位不統一（con-call 專屬）
 同一份簡報不同頁單位可能不同（百萬元 vs 十億元）。`detect_unit_scale()` 往上找「單位：新台幣xx元」宣告，換算成十億元倍率。**只套用在餘額類數字，不套用在比率類數字**（比率無單位，分子分母抵銷）。找不到宣告時預設倍率 1.0。
 
 ### 3.5 「重組」（LOAN_RECOMPOSITION）
-各銀行放款分類不同，無法直接抓到一個詞就代表要的數字。做法：先抓一堆「原始零件」，再用**人工核對過的公式**組合成標準分類。公式在 `callfinder.py` 的 `LOAN_RECOMPOSITION`，**每家銀行不同，是根據實際簡報核對出來的，不是猜的**。銀行改版簡報格式時最需要重新核對的地方。
+各銀行放款分類不同，無法直接抓到一個詞就代表要的數字。做法：先抓一堆「原始零件」，再用**人工核對過的公式**組合成標準分類。公式在 `decks.py` 的 `LOAN_RECOMPOSITION`，**每家銀行不同，是根據實際簡報核對出來的，不是猜的**。銀行改版簡報格式時最需要重新核對的地方。
 
 ### 3.6 交叉驗證與合理範圍檢查的哲學
 文件揭露的數字永遠是主要答案，自算公式結果只當旁證附註提醒，**絕不用自算結果覆蓋揭露值**。合理範圍檢查（如 ROA 應在 ±5% 內）超出時只加註提醒，**不會自動攔截或改寫數值**。
 
 ---
 
-## 4. `acctfinder.py` 逐項細節
+## 4. `statements.py` 逐項細節
 
 ### 4.1 一句話
 給一個 `.md` 資料夾 + 銀行名稱，回傳固定順序（`SUMMARY_LAYOUT`）的財務項目清單。
@@ -153,7 +153,7 @@ runfinder.py：自動判斷兩個資料夾各是財報還是法說會，各自�
 
 ### 4.8 ROA/ROE 三層優先順序與交叉驗證：`collect_roa_roe`
 1. 財報自己揭露的獲利能力表格，**原文照抄，不做年化調整**（早期版本自動 ×4/季數，後來驗證發現不是每家銀行都適用這假設，中信/玉山第一季數字已接近年化，國泰卻是約1/4，無法從文件本身可靠判斷，故不再調整）。
-2. 沒有的話用法說會自己公布的 ROA/ROE（由 `runfinder.py` 傳入，因為 acctfinder 不能 import callfinder，避免循環引用）。
+2. 沒有的話用法說會自己公布的 ROA/ROE（由 `cli.py` 傳入，因為 statements 不能 import decks，避免循環引用）。
 3. 都沒有才用手動公式（`compute_ratios()`：淨利÷平均資產/權益），明確標註是估算值。
 
 不論主要來源為何，只要手動公式算得出來就額外算一次當交叉驗證，差距超過 `_ROA_ROE_CROSSCHECK_DIVERGENCE_FACTOR = 2.0` 倍才加註提醒，**絕不覆蓋主要答案**。另有獨立合理範圍檢查：ROA `[-5%, +5%]`、ROE `[-50%, +50%]`，超出才提醒。
@@ -182,15 +182,15 @@ runfinder.py：自動判斷兩個資料夾各是財報還是法說會，各自�
 
 ### 4.12 怎麼跑
 ```bash
-python acctfinder.py <資料夾路徑> summary --period 1
-python acctfinder.py <資料夾路徑> summary --export csv
-python acctfinder.py <資料夾路徑> summary -v
+python statements.py <資料夾路徑> summary --period 1
+python statements.py <資料夾路徑> summary --export csv
+python statements.py <資料夾路徑> summary -v
 ```
 不加 `--bank` 會自動偵測。單次執行幾秒內完成，不需網路。
 
 ---
 
-## 5. `callfinder.py` 逐項細節
+## 5. `decks.py` 逐項細節
 
 ### 5.1 一句話
 給法說會 `.md` 資料夾 + `con_call_terms.json`，用模糊加權關鍵字比對找出經營指標，必要時連網補金管會網站的數字。
@@ -244,7 +244,7 @@ BALANCE_TERMS = ["企業放款", "房貸", "個人放款", "信用卡循環",
 HELPER_TERMS = ["其他放款", "政府放款", "信貸", "其他個人授信其他",
                 "海外子行", "海外分行", "OBU_DBU", "個人擔保貸款", "小額信貸"]
 ```
-`BALANCE_TERMS` 裡多數項目是靠 `LOAN_RECOMPOSITION` 重組出來，不是直接抓詞對應。`HELPER_TERMS` 只當計算原料，不輸出。**CIR、逾期放款總額已從此檔案輸出移除**（CIR 移到 acctfinder.py；逾期放款總額依指示整個拿掉）。目前額外從金管會補的兩個比率是 `逾放比率`、`備抵呆帳/逾期放款`（見 5.13）。
+`BALANCE_TERMS` 裡多數項目是靠 `LOAN_RECOMPOSITION` 重組出來，不是直接抓詞對應。`HELPER_TERMS` 只當計算原料，不輸出。**CIR、逾期放款總額已從此檔案輸出移除**（CIR 移到 statements.py；逾期放款總額依指示整個拿掉）。目前額外從金管會補的兩個比率是 `逾放比率`、`備抵呆帳/逾期放款`（見 5.13）。
 
 ### 5.11 放款重組公式：`LOAN_RECOMPOSITION`
 每家銀行各自的加減公式，**只能讀原始零件（raw_values），絕對不能讀其他重組後結果**（避免循環依賴）。這些公式是跟財務人員逐項核對法說會簡報內容才寫定的，**不是憑欄位名稱猜的**。銀行改版簡報格式或新增銀行時最需要重新核對的地方，屬於業務邏輯維護，不是「程式壞了」。
@@ -256,7 +256,7 @@ HELPER_TERMS = ["其他放款", "政府放款", "信貸", "其他個人授信其
 `collect_con_call_summary()` 流程：
 1. `detect_con_call_year(folder)` 解析西元年（從標題）。
 2. `detect_con_call_quarter(folder)` 解析季別（找不到則退回 `derive_quarter_num`）。
-3. 換算成民國年月：`npl_finder.roc_year()` / `npl_finder.quarter_end_month()`。
+3. 換算成民國年月：`disclosures.roc_year()` / `disclosures.quarter_end_month()`。
 4. **分開呼叫兩個資料集**：
    - `fetch_credit_card_revolving()` → 只補「信用卡循環」（簡報自己有數字時優先用簡報）。
    - `fetch_overdue_loans()` → 輸出「逾放比率」「備抵呆帳/逾期放款」，**永遠**用這個來源（法說會完全沒有這兩個數字）。
@@ -267,23 +267,23 @@ HELPER_TERMS = ["其他放款", "政府放款", "信貸", "其他個人授信其
 期間解析失敗時不放棄，改抓「目前已公布的最新一期」，並在 `period_label`/`matched_label` 誠實標示。輸出的政府網站欄位期間跟簡報季度對不上時，先查 `detect_con_call_year`/`detect_con_call_quarter` 有沒有正確解析標題。
 
 ### 5.14 輸出函式
-`print_summary_rows(rows)` / `write_summary_csv(folder, rows)`。CSV 裡數字是**已格式化的文字字串**，不適合拿去做 Excel 公式計算，需要能算的 Excel 用 `runfinder.py --export excel`。
+`print_summary_rows(rows)` / `write_summary_csv(folder, rows)`。CSV 裡數字是**已格式化的文字字串**，不適合拿去做 Excel 公式計算，需要能算的 Excel 用 `cli.py --export excel`。
 
 ### 5.15 怎麼跑
 ```bash
-python callfinder.py --folder <資料夾路徑>
-python callfinder.py --folder <資料夾路徑> --export csv
-python callfinder.py --folder <資料夾路徑> "放款均率,存放利差"
-python callfinder.py --folder <資料夾路徑> -v
+python decks.py --folder <資料夾路徑>
+python decks.py --folder <資料夾路徑> --export csv
+python decks.py --folder <資料夾路徑> "放款均率,存放利差"
+python decks.py --folder <資料夾路徑> -v
 ```
 本機比對幾秒內完成；連網部分（信用卡循環/逾放比率/備抵呆帳）第一次會有網路延遲，之後靠 `npl_cache/` 快取加速。需要能連 `banking.gov.tw`，連不上時這幾欄自動變 N/A，不影響其他欄位。
 
 ---
 
-## 6. `npl_finder.py` 逐項細節
+## 6. `disclosures.py` 逐項細節
 
 ### 6.1 定位
-完全獨立，不 import 專案內其他檔案；`callfinder.py` 用「函式內部 import」呼叫它，即使它壞掉/網路不通也不會讓 callfinder.py 整個載入失敗。**未來加功能切記不要讓它反過來 import acctfinder/callfinder，會循環引用。**
+完全獨立，不 import 專案內其他檔案；`decks.py` 用「函式內部 import」呼叫它，即使它壞掉/網路不通也不會讓 decks.py 整個載入失敗。**未來加功能切記不要讓它反過來 import statements/decks，會循環引用。**
 
 ### 6.2 兩個資料集
 
@@ -331,7 +331,7 @@ fetch_credit_card_revolving(roc_year=None, month=None, banks=TARGET_BANKS, verbo
 # → {"values":...}
 
 fetch_for_quarter(western_year, quarter, banks=TARGET_BANKS, verbose=False)
-# 一次呼叫上面兩個；callfinder.py目前【沒有】用這個，是分開個別呼叫
+# 一次呼叫上面兩個；decks.py目前【沒有】用這個，是分開個別呼叫
 
 quarter_end_month(quarter)   # 1→3,2→6,3→9,4→12
 roc_year(western_year)       # 西元年-1911
@@ -343,15 +343,15 @@ thousands_to_billions(value)
 
 ### 6.10 怎麼跑
 ```bash
-python npl_finder.py
-python npl_finder.py --year 2025 --quarter 4
-python npl_finder.py -v
+python disclosures.py
+python disclosures.py --year 2025 --quarter 4
+python disclosures.py -v
 ```
 第一次無快取5~20秒，有快取幾乎瞬間。與 `.md` 資料夾完全無關，只跟年/季有關。
 
 ---
 
-## 7. `runfinder.py` 逐項細節
+## 7. `cli.py` 逐項細節
 
 ### 7.1 用途
 自動判斷資料夾是財報還是法說會，各自呼叫對應程式，可合併輸出成一份 Excel。
@@ -379,10 +379,10 @@ python npl_finder.py -v
 
 ### 7.7 怎麼跑
 ```bash
-python runfinder.py
-python runfinder.py <財報資料夾> <法說會資料夾>
-python runfinder.py --export excel <資料夾1> <資料夾2>
-python runfinder.py --export csv <資料夾>
+python cli.py
+python cli.py <財報資料夾> <法說會資料夾>
+python cli.py --export excel <資料夾1> <資料夾2>
+python cli.py --export csv <資料夾>
 ```
 資料夾選擇視窗用tkinter，只在有圖形介面環境能用，伺服器排程需改用直接帶路徑執行。
 
@@ -390,7 +390,7 @@ python runfinder.py --export csv <資料夾>
 
 ## 8. `con_call_terms.json` 結構與新增詞彙教學
 
-`callfinder.py` 讀取的唯一字典檔案（`load_terms(config_path)`）。`con_call_terms_example.json` 只是格式範例，不影響實際執行。
+`decks.py` 讀取的唯一字典檔案（`load_terms(config_path)`）。`con_call_terms_example.json` 只是格式範例，不影響實際執行。
 
 ### 8.1 新增exact型詞彙範例
 ```json
@@ -440,12 +440,12 @@ pip install openpyxl
 
 ### 9.2 依賴關係圖
 ```
-acctfinder.py    ← 完全獨立
-callfinder.py    ← 執行時動態 import npl_finder（函式內部import，非檔案頂部）
-npl_finder.py    ← 完全獨立
-runfinder.py     ← import acctfinder as af; import callfinder as cf
+statements.py    ← 完全獨立
+decks.py    ← 執行時動態 import disclosures（函式內部import，非檔案頂部）
+disclosures.py    ← 完全獨立
+cli.py     ← import statements as af; import decks as cf
 ```
-**acctfinder.py絕對不能反過來import callfinder.py**（會循環引用，因為callfinder已import acctfinder的共用工具函式）。
+**statements.py絕對不能反過來import decks.py**（會循環引用，因為callfinder已import acctfinder的共用工具函式）。
 
 ### 9.3 輸入格式要求
 必須是PDF轉出的`.md`資料夾，檔名`頁碼_隨機碼.md`格式（`page_num()`解析頁碼，格式不符時退而用整個檔名，不會出錯但顯示不直觀）。
@@ -454,11 +454,11 @@ runfinder.py     ← import acctfinder as af; import callfinder as cf
 
 | 情境 | 需要網路 |
 |---|---|
-| acctfinder.py單獨執行 | 否 |
-| callfinder.py，簡報自己有信用卡循環數字，不需逾放比率/備抵呆帳 | 否 |
-| callfinder.py，需要補信用卡循環或逾放比率/備抵呆帳 | 是（banking.gov.tw） |
-| npl_finder.py任何執行 | 是（banking.gov.tw） |
-| runfinder.py | 視分類結果而定 |
+| statements.py單獨執行 | 否 |
+| decks.py，簡報自己有信用卡循環數字，不需逾放比率/備抵呆帳 | 否 |
+| decks.py，需要補信用卡循環或逾放比率/備抵呆帳 | 是（banking.gov.tw） |
+| disclosures.py任何執行 | 是（banking.gov.tw） |
+| cli.py | 視分類結果而定 |
 
 ---
 
@@ -481,7 +481,7 @@ runfinder.py     ← import acctfinder as af; import callfinder as cf
 4. 法說會重組公式：拆開逐步印出每個原始零件的值，跟簡報原文核對加減方向，不要只看加總後數字是否「看起來合理」。
 
 ### 情境C：政府網站相關欄位抓不到或報錯
-1. 先確認是否網路問題：單獨執行 `python npl_finder.py -v`。
+1. 先確認是否網路問題：單獨執行 `python disclosures.py -v`。
    - SSL憑證錯誤→ `pip install pip-system-certs`，不要關閉驗證。
    - 完全連不上→檢查防火牆/VPN是否封鎖banking.gov.tw。
 2. 確認是否網站改版：`_list_period_links`報錯「No dataset links matching」→用瀏覽器打開頁面比對新的檔名格式，修改對應正規表示式。
@@ -502,7 +502,7 @@ runfinder.py     ← import acctfinder as af; import callfinder as cf
 - [ ] 確認財報有代碼欄位（沒有的話財報端無法支援，需另外設計文字比對邏輯）
 - [ ] 確認資產負債表單欄/雙欄排版
 
-**acctfinder.py：**
+**statements.py：**
 - [ ] `BANKS`加入簡稱
 - [ ] `BANK_NAME_ALIASES`加入所有全名/簡稱寫法
 - [ ] 逐一核對`SUMMARY_LAYOUT`每個代碼，對不上的補`SUMMARY_CODE_OVERRIDES`或`SUMMARY_LABEL_FALLBACKS`
@@ -510,17 +510,17 @@ runfinder.py     ← import acctfinder as af; import callfinder as cf
 - [ ] 雙欄排版的話測試`_split_dual_column_tables`偵測是否適用
 - [ ] 真實資料跑`collect_summary_rows`人工核對
 
-**callfinder.py：**
+**decks.py：**
 - [ ] `PRIMARY_BANK_ENTITIES`加入名稱寫法
 - [ ] `_GOV_BANK_NAMES`補上政府資料集官方全名
 - [ ] 重新設計`LOAN_RECOMPOSITION`公式（工作量最大，需跟業務逐項核對；若簡報已互斥分類則給空字典`{}`）
 - [ ] 測試現有RATIO_TERMS能否正常抓取，抓不到就擴充別名/否決詞
 
-**npl_finder.py：**
+**disclosures.py：**
 - [ ] `TARGET_BANKS`加入兩個政府資料集裡的官方全名（先核對兩資料集寫法是否一致）
 
 **驗收：**
-- [ ] `runfinder.py --export excel`跑完整流程，逐項核對官方數字/簡報原文，不只看有沒有報錯
+- [ ] `cli.py --export excel`跑完整流程，逐項核對官方數字/簡報原文，不只看有沒有報錯
 
 ### 11.2 新增財報輸出項目
 1. 判斷屬於code/composite/label哪一種
@@ -551,7 +551,7 @@ runfinder.py     ← import acctfinder as af; import callfinder as cf
 
 **每半年到一年：**
 - [ ] 檢查`npl_cache/`大小，視情況清理
-- [ ] 檢查金管會網站結構是否仍符合假設（`python npl_finder.py -v`）
+- [ ] 檢查金管會網站結構是否仍符合假設（`python disclosures.py -v`）
 - [ ] 銀行若改版簡報格式，重新核對`LOAN_RECOMPOSITION`
 
 **遇到抓錯回報時：**
@@ -569,10 +569,10 @@ runfinder.py     ← import acctfinder as af; import callfinder as cf
 | 財報 / fin_report | 個別財務報告書，有官方會計科目代碼 |
 | 法說會 / con_call | 法人說明會簡報，無統一格式 |
 | 科目代碼 | 官方統一會計項目編號 |
-| SUMMARY_LAYOUT | acctfinder.py固定輸出順序清單 |
+| SUMMARY_LAYOUT | statements.py固定輸出順序清單 |
 | COMPOSITE_TERMS | 跨代碼加總、各銀行公式不同的項目定義 |
 | build_code_index | 一次掃描批次解析多代碼的效能優化函式 |
-| TermSpec | callfinder.py每個關鍵字詞條的資料結構 |
+| TermSpec | decks.py每個關鍵字詞條的資料結構 |
 | exact / composite | 兩種比對型態 |
 | negative_terms | 否決詞 |
 | entity_tier | 判斷表格屬於本行還是集團/子公司 |
@@ -581,21 +581,21 @@ runfinder.py     ← import acctfinder as af; import callfinder as cf
 | unit_scale / detect_unit_scale | 金額單位換算成十億元 |
 | crosscheck | 交叉驗證，旁證不覆蓋主答案 |
 | plausibility bounds | 合理範圍檢查，超出只提醒 |
-| npl_finder | 金管會網站抓取模組 |
+| disclosures | 金管會網站抓取模組 |
 | 逾期放款總額 | NPL，已從法說會輸出移除 |
 | 逾放比率 / 備抵呆帳/逾期放款 | 銀行整體比率，來自金管會id=590資料集 |
 | 循環信用餘額 / 信用卡循環 | 信用卡循環信用餘額，來自信用卡專屬揭露資料集 |
-| runfinder.py | 整合執行器 |
+| cli.py | 整合執行器 |
 | exact=False | npl_finder回傳結果裡，代表用了較早一期頂替 |
 
 ### 13.2 檔案總覽
 
 | 檔案 | 可否手動編輯 | 備註 |
 |---|---|---|
-| acctfinder.py | 是 | 核心程式，改動需真實資料驗證 |
-| callfinder.py | 是 | 核心程式，比對邏輯較複雜，改動風險較高 |
-| npl_finder.py | 是 | 外部風險在於政府網站可能改版 |
-| runfinder.py | 是 | 整合層 |
+| statements.py | 是 | 核心程式，改動需真實資料驗證 |
+| decks.py | 是 | 核心程式，比對邏輯較複雜，改動風險較高 |
+| disclosures.py | 是 | 外部風險在於政府網站可能改版 |
+| cli.py | 是 | 整合層 |
 | con_call_terms.json | **是，最常需要調整** | 新增/修改詞彙主要改這裡 |
 | con_call_terms_example.json | 僅供格式參考 | 不影響實際執行 |
 | 金控業/金融業/保險業.xlsx | **不應手動編輯** | 官方科目代碼表，唯讀權威資料源 |

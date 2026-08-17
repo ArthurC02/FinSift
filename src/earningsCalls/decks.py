@@ -1,13 +1,13 @@
 """
 Search a folder of converted markdown (.md) earnings-call transcripts for
 configurable terms and pull an associated value from the tables within them
-- the conference-call counterpart to acctfinder.py's coded
+- the conference-call counterpart to statements.py's coded
 financial-statement extraction.
 
 Earnings-call terms are a completely different vocabulary from financial-
 statement account codes (e.g. loan growth guidance, NIM outlook, credit cost
 commentary, rather than fixed 5-digit codes), so this is a SEPARATE entry
-point from acctfinder.py rather than another mode of it - the user
+point from statements.py rather than another mode of it - the user
 explicitly runs one or the other depending on whether a given batch of .md
 files came from a quarterly financial report or an earnings call.
 
@@ -29,14 +29,14 @@ row outright if any of those strings appear in it, regardless of an
 otherwise-passing alias or composite score.
 
 Once a term's row is identified, VALUE extraction reuses the same table-
-parsing / continuation-folding machinery built for acctfinder.py
+parsing / continuation-folding machinery built for statements.py
 (imported directly, since both live in this project and should stay in
 sync rather than duplicate logic) - con-call .md files are assumed, per
 instruction pending a real sample, to share the same underlying pipe-table
 structure as the financial-report .md files.
 
 Usage:
-    python callfinder.py <term> --folder <folder> --config con_call_terms.json [--period N] [--export csv] [-v]
+    python decks.py <term> --folder <folder> --config con_call_terms.json [--period N] [--export csv] [-v]
 
 --folder may be omitted, opening a folder-picker dialog instead.
 
@@ -57,12 +57,12 @@ from core.text import _contains_any, page_num
 from core.numbers import parse_numeric, format_pct, format_maybe_pct
 from core.tables import build_raw_lines, restrict_section, parse_pipe_tables
 # Imported from the modules that actually own these, not through the
-# acctfinder facade. Reaching through acctfinder pulled the whole fin_report
+# statements facade. Reaching through statements pulled the whole fin_report
 # stack (summary -> ratios -> entities) in to get four names, and made this
 # module look like it depended on summary extraction, which it does not.
 from financialReports.entities import BANK_PROFILES, detect_bank
 from financialReports.ratios import derive_quarter_num
-from financialReports.acctfinder import pick_folder
+from financialReports.statements import pick_folder
 
 # Windows consoles often default to cp1252, which can't print CJK output.
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
@@ -185,7 +185,7 @@ def match_strength(term_spec, text):
 #   - "col_period": each DATA ROW is one metric/entity (e.g. 整體逾放比,
 #     Spread, NIM, or a subsidiary name), and the HEADER names each period
 #     as its own column - the same shape already built for 玉山金控's
-#     transposed 獲利能力 table in acctfinder.py.
+#     transposed 獲利能力 table in statements.py.
 # Real periods are also heterogeneous granularity in the same table (FY25,
 # 1Q25, 1H25, 9M25, 4Q25 all appear together across the deck), and a table
 # can have non-period columns mixed in among real period columns (e.g. a
@@ -387,7 +387,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 # The PRIMARY bank subsidiary each deck is about - see BANK_PROFILES'
 # primary_entities field for why picking the wrong subsidiary is worse than
 # reporting nothing. Derived rather than held here so that adding an entity
-# is one edit in one place, and so acctfinder's profile validation covers it.
+# is one edit in one place, and so statements's profile validation covers it.
 PRIMARY_BANK_ENTITIES = {name: profile["primary_entities"]
                          for name, profile in BANK_PROFILES.items()}
 
@@ -899,9 +899,9 @@ def extract_term(folder, term_spec, verbose=False):
 # ---------------------------------------------------------------------------
 # Curated summary: a fixed, business-relevant subset of the 32-term
 # dictionary, rather than every term (several of which - 總資產, 淨收益,
-# 稅前/稅後淨利, ROA/ROE, etc. - overlap conceptually with acctfinder.py's
+# 稅前/稅後淨利, ROA/ROE, etc. - overlap conceptually with statements.py's
 # financial-report extraction and aren't wanted in con-call output). This is
-# the default mode when no term is given, matching acctfinder.py's
+# the default mode when no term is given, matching statements.py's
 # curated `summary` design: both ratio-type and balance-type terms get only
 # the latest-quarter, as-reported value. An earlier version of this code
 # additionally scaled ratio terms by x4/quarter_num to produce an
@@ -924,7 +924,7 @@ def extract_term(folder, term_spec, verbose=False):
 # ---------------------------------------------------------------------------
 
 RATIO_TERMS = ["NIM", "放款均率", "存款均率", "存放利差"]
-# CIR moved to the fin_report summary (acctfinder.SUMMARY_LAYOUT), computed
+# CIR moved to the fin_report summary (statements.SUMMARY_LAYOUT), computed
 # directly as abs(營業費用)/淨收益 from the SAME filing, no crosscheck - the
 # con-call deck's own 營業費用/營業收入 table turned out to be a different
 # scope (bank-level operating figures at deck-reported scale, e.g. 中信's
@@ -948,13 +948,13 @@ HELPER_TERMS = ["其他放款", "政府放款", "信貸", "其他個人授信其
 # wrongly sourced two similarly-named but different metrics off the
 # credit-card sheet instead), read from the SAME FSC "本國銀行資產品質評估
 # 分析統計表" sheet as 逾期放款總額, no con-call source at all. Already
-# percent-scale numbers there - see npl_finder.NPL_RATIO_HEADER/
+# percent-scale numbers there - see disclosures.NPL_RATIO_HEADER/
 # NPL_COVERAGE_HEADER - passed straight through as "ratio" kind rows.
 NPL_RATIO_TERM = "逾放比率"
 NPL_COVERAGE_TERM = "備抵呆帳/逾期放款"
 
 # This project's short bank names -> the exact legal names the FSC regulator
-# spreadsheets use in their own bank-name column (see npl_finder.TARGET_BANKS).
+# spreadsheets use in their own bank-name column (see disclosures.TARGET_BANKS).
 #
 # DELIBERATELY NOT extended to the six entities added to BANK_PROFILES from
 # their 114Q4 filings. The key here has to be the string the FSC's own
@@ -1034,7 +1034,7 @@ def _sub(a, b):
 # Each formula reads from the RAW (pre-recomposition) values dict, so
 # formulas never see each other's output and can be written in any order.
 #
-# Deliberately NOT folded into acctfinder.BANK_PROFILES with the other
+# Deliberately NOT folded into statements.BANK_PROFILES with the other
 # per-entity tables. Two reasons. It is logic, not data - lambdas nested in a
 # dict literal, the one construct static import checking can't see (which is
 # why tools/undefined.py walks dicts and why the L2 suite executes all nine),
@@ -1085,7 +1085,7 @@ LOAN_RECOMPOSITION = {
 # rounding. Anything beyond this tolerance means a component matched the
 # wrong row or a formula's assumption stopped holding for a new filing -
 # surfaced as a note rather than silently accepted (same principle as
-# acctfinder's 資產=負債+權益 check).
+# statements's 資產=負債+權益 check).
 # Sized for the decks' own rounding, not for arithmetic error: 中信's
 # standalone loan table prints whole 拾億元 integers, so 4 components plus a
 # total carry up to ~±2.5 of accumulated rounding - and that deck's OWN rows
@@ -1112,7 +1112,7 @@ def detect_con_call_quarter(folder):
     `folder` (sorted - typically the cover page). Con-call decks state the
     quarter directly in the title (e.g. '2025年第四季法人說明會' = Q4 2025)
     using the Western calendar year, not the ROC-calendar convention
-    acctfinder.py's derive_quarter_num assumes for financial statements -
+    statements.py's derive_quarter_num assumes for financial statements -
     so this looks for that ordinal pattern instead of reusing it. A deck
     titled '全年'/full-year is treated as Q4, since that is the period it
     covers. Falls back to derive_quarter_num (ROC-date parsing) if no such
@@ -1164,7 +1164,7 @@ def collect_con_call_summary(folder, terms, verbose=False, bank=None):
     regulator-sourced rows (逾放比率, 備抵呆帳/逾期放款, and 信用卡循環 when
     the deck itself disclosed nothing) the reason that lookup produced
     nothing - see gov_name_note.
-    CIR is no longer produced here - see acctfinder.SUMMARY_LAYOUT (moved to
+    CIR is no longer produced here - see statements.SUMMARY_LAYOUT (moved to
     the fin_report summary, computed directly from the same filing's
     營業費用/淨收益 with no crosscheck against this deck's figures - see
     RATIO_TERMS' comment for why). `bank` scopes matching to that bank's own
@@ -1233,17 +1233,17 @@ def collect_con_call_summary(folder, terms, verbose=False, bank=None):
     need_gov = raw["信用卡循環"]["value"] is None
     if bank:
         try:
-            from regulatorDatasets import npl_finder
+            from regulatorDatasets import disclosures
             legal = _GOV_BANK_NAMES.get(bank)
             if legal:
                 if western_year and quarter_num:
-                    y, m = npl_finder.roc_year(western_year), npl_finder.quarter_end_month(quarter_num)
+                    y, m = disclosures.roc_year(western_year), disclosures.quarter_end_month(quarter_num)
                 else:
                     y = m = None
-                cc = npl_finder.fetch_credit_card_revolving(y, m, banks=[legal], verbose=verbose)
-                npl = npl_finder.fetch_overdue_loans(y, m, banks=[legal], verbose=verbose)
+                cc = disclosures.fetch_credit_card_revolving(y, m, banks=[legal], verbose=verbose)
+                npl = disclosures.fetch_overdue_loans(y, m, banks=[legal], verbose=verbose)
                 if cc:
-                    cc["values_billions"] = {b: npl_finder.thousands_to_billions(v)
+                    cc["values_billions"] = {b: disclosures.thousands_to_billions(v)
                                               for b, v in cc["values"].items()}
         except Exception as e:  # network/site/parse - never sink the whole run
             if verbose:
@@ -1267,7 +1267,7 @@ def collect_con_call_summary(folder, terms, verbose=False, bank=None):
     if npl:
         legal = _GOV_BANK_NAMES.get(bank)
         # Already percent-scale numbers in the source (see
-        # npl_finder.NPL_RATIO_HEADER/NPL_COVERAGE_HEADER) - passed through
+        # disclosures.NPL_RATIO_HEADER/NPL_COVERAGE_HEADER) - passed through
         # as-is, never rescaled, so they display via format_pct exactly as
         # the regulator published them.
         if npl.get("npl_ratios", {}).get(legal) is not None:
