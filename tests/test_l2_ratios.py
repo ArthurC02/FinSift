@@ -9,6 +9,13 @@ import pytest
 
 import acctfinder as af
 import callfinder as cf
+# Stubs go on the module whose globals the consumer actually reads, not on the
+# acctfinder facade that re-exports the name. compute_ratios and
+# collect_roa_roe live in ratios.py; collect_summary_rows lives in summary.py
+# and binds collect_roa_roe into its own namespace at import. Patching `af`
+# would install a stub nothing looks at - green tests exercising real code.
+import ratios
+import summary
 
 # --------------------------------------------------------------------------
 # §5.2 collect_roa_roe / build - priority table (11 rules)
@@ -28,14 +35,14 @@ def build_roa(monkeypatch, tmp_path, disclosed=None, concall=None, manual=None):
     required code or the quarter number can't be found.
     """
     entries = [entry(roa=disclosed)] if disclosed is not None else []
-    monkeypatch.setattr(af, "find_profitability_entries", lambda folder, verbose=False: entries)
+    monkeypatch.setattr(ratios, "find_profitability_entries", lambda folder, verbose=False: entries)
 
     def fake_compute(folder, bank, coding=None, verbose=False):
         if manual is None:
             raise RuntimeError("no manual formula available")
         return {"roa": manual, "roe": manual, "quarter_num": 4}
 
-    monkeypatch.setattr(af, "compute_ratios", fake_compute)
+    monkeypatch.setattr(ratios, "compute_ratios", fake_compute)
     return af.collect_roa_roe(tmp_path, "中信", concall_roa=concall, concall_roe=concall)["roa"]
 
 
@@ -235,7 +242,7 @@ def test_CIR_reports_N_A_instead_of_crashing_on_a_valueless_opex(monkeypatch, tm
     than a stubbed index, because the fix is in the channel - stubbing the
     index would test a shape the code no longer produces."""
     write_md(tmp_path, "007_a.md", NET_REVENUE, VALUELESS_OPEX)
-    monkeypatch.setattr(af, "collect_roa_roe",
+    monkeypatch.setattr(summary, "collect_roa_roe",
                         lambda folder, bank, **kw: {"roa": None, "roe": None})
     # industry passed explicitly: this fixture carries no entity legal name,
     # and summary mode now refuses a layout it can't tie to a scheme (see
@@ -271,7 +278,7 @@ def test_ZERO_ASSETS_degrades_instead_of_crashing_the_whole_run(monkeypatch, tmp
     (tmp_path / "007_bs.md").write_text("114年12月31日\n", encoding="utf-8")
     values = {"10000": 0, "30000": 500, "64000": 100}
     monkeypatch.setattr(
-        af, "find_code_value",
+        ratios, "find_code_value",
         lambda folder, code, period=1, verbose=False, label_fallback=None:
             ("label", values.get(code, 100), "007_bs.md"))
 
@@ -279,7 +286,7 @@ def test_ZERO_ASSETS_degrades_instead_of_crashing_the_whole_run(monkeypatch, tmp
         af.compute_ratios(tmp_path, "中信")
 
     # ...and via collect_roa_roe that now degrades rather than propagating.
-    monkeypatch.setattr(af, "find_profitability_entries", lambda folder, verbose=False: [])
+    monkeypatch.setattr(ratios, "find_profitability_entries", lambda folder, verbose=False: [])
     assert af.collect_roa_roe(tmp_path, "中信") == {"roa": None, "roe": None}
 
 
@@ -288,7 +295,7 @@ def test_zero_equity_is_caught_too(monkeypatch, tmp_path):
     (tmp_path / "007_bs.md").write_text("114年12月31日\n", encoding="utf-8")
     values = {"10000": 1000, "30000": 0, "64000": 100}
     monkeypatch.setattr(
-        af, "find_code_value",
+        ratios, "find_code_value",
         lambda folder, code, period=1, verbose=False, label_fallback=None:
             ("label", values.get(code, 100), "007_bs.md"))
     with pytest.raises(RuntimeError, match="權益總計"):

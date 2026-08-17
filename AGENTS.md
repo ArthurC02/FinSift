@@ -10,12 +10,26 @@
 
 | 進入點 | 做什麼 |
 |---|---|
-| `src/acctfinder.py` | 財報擷取。**用法定科目代碼精確比對**，不是文字比對 |
+| `src/acctfinder.py` | 財報擷取的 CLI 與逐表 dump。**用法定科目代碼精確比對**，不是文字比對。也是門面：`summary` / `ratios` / `entities` 的公開名稱都從這裡再匯出，所以 `acctfinder.X` 一律有效 |
 | `src/callfinder.py` | 法說會簡報擷取。文字比對，詞彙定義在 `data/con_call_terms.json` |
 | `src/runfinder.py` | 自動判斷資料夾是財報還是法說會，跑對應的擷取器並合併輸出 |
 | `src/npl_finder.py` | 抓金管會銀行局公開月報。**刻意完全獨立**，不匯入其他三個 |
 
-`src/core/` 是共用解析層（`text` / `numbers` / `tables` / `lookup`），單向依賴 `lookup → tables → text`，不回頭依賴上層。`lookup` 是資料夾層級的科目代碼／標籤查找，`compute_ratios` 與 `collect_summary_rows` 都坐在它上面。
+財報側再往下分三層，**單向**、不得回頭：
+
+```
+acctfinder（CLI + 逐表 dump）
+        └── summary（layout、collect_summary_rows、匯出）
+                └── ratios（獲利能力表解析、compute_ratios、collect_roa_roe）
+                        └── entities（BANK_PROFILES、代碼 fallback、機構偵測）
+                                └── core（industry / lookup / tables / numbers / text）
+```
+
+`entities` 是 `summary` 與 `ratios` 的共同地板：`compute_ratios` 需要 `SUMMARY_CODE_OVERRIDES`／`SUMMARY_LABEL_FALLBACKS`，而 `collect_summary_rows` 需要 `collect_roa_roe` —— 兩邊互相依賴，所以不能只切兩塊。
+
+`src/core/` 是共用解析層（`industry` / `lookup` / `tables` / `numbers` / `text`），單向依賴 `lookup → tables → text`，**不得匯入任何擷取器**。
+
+> **測試打 monkeypatch 要打在真正被讀取的模組上**，不是 `acctfinder` 這個門面。`compute_ratios` 住在 `ratios`，`collect_summary_rows` 住在 `summary`（它在 import 時就把 `collect_roa_roe` 綁進自己的命名空間）。打錯地方 = 測試全綠但跑的是真程式。
 
 相依只有 `openpyxl` 與 `pytest`（無 `pyproject.toml`）。建環境、CLI 用法、旗標 → [docs/SETUP.md](docs/SETUP.md)
 
