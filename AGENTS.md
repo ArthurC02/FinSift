@@ -59,6 +59,7 @@ earningsCalls/__init__.py   ← 門面
 ```powershell
 python -m pytest            # V1 行為
 python tools\undefined.py   # V3 缺漏 import（含巢狀在 dict 裡的 lambda）
+python tools\knowledge_links.py   # V5 註解引用的知識章節是否還在
 python src\userInteractions\cli.py --help                      # V2 四個 CLI
 foreach ($c in 'acct','call','npl') { python src\userInteractions\cli.py $c --help }
 python tools\ab.py <改動前的 src> > before.txt   # V4 A/B 位元組比對
@@ -82,8 +83,17 @@ python tools\ab.py <改動前的 src> > before.txt   # V4 A/B 位元組比對
 | 使用者面向的完整用法（中英雙語） | [README.md](README.md) |
 | 重構計畫的歷史紀錄 | [docs/REFACTOR_PLAN.md](docs/REFACTOR_PLAN.md)（**已執行完畢，歷史文件**） |
 
+## 知識文件
+
+長篇的來龍去脈（比對過哪幾份財報、踩過的坑、試過而放棄的作法）放在 `docs/knowledge/<套件>.md`。程式碼裡只留**規則本身**——門檻值旁的一行、「不要 X」的祈使句——再加一行 `→ docs/knowledge/...#章節`。
+
+判準：**這行註解消失後，會不會有人做出一個看起來完全合理的修改，而產生靜默的錯數字？**
+會 → 留在程式碼旁。不會 → 進知識文件。
+
+`tools/knowledge_links.py` 只保證被引用的章節**還存在**，不保證內容**還正確**。綠燈的意思是「地址還在」。
+
 ## 判斷來源可信度的順序
 
-程式碼 > 緊鄰常數的註解 > `docs/` > commit message 的歷史敘述。
+程式碼 > 緊鄰常數的註解 > `docs/knowledge/` > 其餘 `docs/` > commit message 的歷史敘述。
 
 門檻值、容忍度、合理範圍上下限旁邊的註解通常說明「為什麼是這個值」，**改之前先讀那段註解**。
